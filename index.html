@@ -82,7 +82,7 @@
       <header>
         <div>
           <h1>Robot Control Center</h1>
-          <div class="status">● Control core ready</div>
+          <div class="status">● Frontend ready · backend bridge not connected</div>
         </div>
         <div id="clock"></div>
       </header>
@@ -125,18 +125,19 @@ const robots = [
 ];
 
 const logLines = [];
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function render() {
   document.getElementById("robotGrid").innerHTML = robots.map(r => `
     <div class="card">
       <div class="robot-head">
-        <div class="robot-name">${r.id}</div>
+        <div class="robot-name">${esc(r.id)}</div>
         <div class="${r.connected ? "online" : "offline"}">
           ● ${r.connected ? "ONLINE" : "OFFLINE"}
         </div>
       </div>
       <div class="telemetry">
-        <div class="metric"><small>IP</small>${r.ip}</div>
+        <div class="metric"><small>IP</small>${esc(r.ip)}</div>
         <div class="metric"><small>Battery</small>${r.battery}%</div>
         <div class="metric"><small>Command</small>${r.command}</div>
         <div class="metric"><small>Speed</small>50%</div>
@@ -162,7 +163,7 @@ async function sendCommand(id, command, speed) {
   if (!robot) return;
 
   const line = `[${new Date().toLocaleTimeString()}] ${id} -> ${command} ${speed}`;
-  logLines.unshift(line);
+  logLines.unshift(esc(line));
 
   try {
     const response = await fetch(
@@ -172,12 +173,12 @@ async function sendCommand(id, command, speed) {
 
     if (result.ok) {
       robot.command = command;
-      logLines.unshift(`[${new Date().toLocaleTimeString()}] OK: ${result.message}`);
+      logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] OK: ${result.message}`));
     } else {
-      logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: ${result.message}`);
+      logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] ERROR: ${result.message}`));
     }
   } catch (error) {
-    logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`);
+    logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`));
   }
 
   document.getElementById("log").innerHTML =
@@ -198,7 +199,7 @@ async function emergencyStop() {
     logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`);
   }
 
-  robots.forEach(r => r.command = "STOP");
+  robots.forEach(r => { r.command = "STOP"; });
   document.getElementById("log").innerHTML = logLines.slice(0, 30).join("<br>");
   document.getElementById("fullLog").innerHTML = logLines.join("<br>");
   render();
