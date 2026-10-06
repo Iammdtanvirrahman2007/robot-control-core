@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Control Core</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #080b12;
+      color: #e9eef8;
+    }
+    .app { min-height: 100vh; display: flex; }
+    aside {
+      width: 230px; padding: 22px 16px; border-right: 1px solid #1d2430;
+      background: #0c1018; position: fixed; inset: 0 auto 0 0;
+    }
+    .brand { font-weight: 800; font-size: 18px; margin-bottom: 28px; }
+    .brand span { color: #66d9ff; }
+    nav button {
+      width: 100%; padding: 11px 12px; margin: 4px 0; text-align: left;
+      border: 0; border-radius: 9px; background: transparent; color: #9ba7b8;
+      cursor: pointer;
+    }
+    nav button.active, nav button:hover { background: #17202d; color: #fff; }
+    main { margin-left: 230px; width: calc(100% - 230px); padding: 28px; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 25px; }
+    .status { color: #7ee2a8; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .card {
+      background: #0f141d; border: 1px solid #202a38; border-radius: 14px; padding: 18px;
+    }
+    .robot-head { display:flex; justify-content:space-between; align-items:center; }
+    .robot-name { font-size: 18px; font-weight: 700; }
+    .online { color: #7ee2a8; font-size: 12px; }
+    .offline { color: #ff8b8b; font-size: 12px; }
+    .telemetry { margin: 18px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .metric { background:#0a0e15; border-radius:9px; padding:10px; }
+    .metric small { display:block; color:#7f8a9a; margin-bottom:3px; }
+    .controls { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+    .controls button {
+      border:1px solid #2b3748; background:#151d28; color:#e9eef8;
+      border-radius:8px; padding:10px; cursor:pointer;
+    }
+    .controls button:hover { background:#202b3a; }
+    .controls .stop { background:#3a1e25; border-color:#66323b; }
+    .controls .wide { grid-column:span 3; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+    .log {
+      margin-top: 20px; background:#090d14; border:1px solid #202a38;
+      border-radius:12px; padding:14px; height:180px; overflow:auto;
+      font-family: ui-monospace, monospace; font-size:12px; color:#9eabbc;
+    }
+    @media(max-width:700px) {
+      aside { width:70px; padding:14px 8px; }
+      .brand { font-size:0; text-align:center; }
+      .brand span { font-size:20px; }
+      nav button { font-size:0; text-align:center; }
+      nav button::first-letter { font-size:18px; }
+      main { margin-left:70px; width:calc(100% - 70px); padding:18px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">ROBOT <span>CORE</span></div>
+    <nav>
+      <button class="active" onclick="showPanel('dashboard', this)">◉ Dashboard</button>
+      <button onclick="showPanel('robots', this)">▣ Robots</button>
+      <button onclick="showPanel('network', this)">⌁ Network</button>
+      <button onclick="showPanel('logs', this)">≡ Logs</button>
+    </nav>
+  </aside>
+
+  <main>
+    <section id="dashboard" class="panel active">
+      <header>
+        <div>
+          <h1>Robot Control Center</h1>
+          <div class="status">● Control core ready</div>
+        </div>
+        <div id="clock"></div>
+      </header>
+      <div class="grid" id="robotGrid"></div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section id="robots" class="panel">
+      <header><h1>Robots</h1></header>
+      <div class="card">
+        <p>Robot registry will connect to the C++ MultiRobotManager.</p>
+        <p>Phase: <strong>control UI prototype</strong></p>
+      </div>
+    </section>
+
+    <section id="network" class="panel">
+      <header><h1>Network</h1></header>
+      <div class="card">
+        <p>Transport: TCP</p>
+        <p>Target: ESP32</p>
+        <p>Port: 5000</p>
+        <p>Status: <span class="status">Ready</span></p>
+      </div>
+    </section>
+
+    <section id="logs" class="panel">
+      <header><h1>Command Logs</h1></header>
+      <div class="log" id="fullLog"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const robots = [
+  { id: "R1", ip: "192.168.1.101", battery: 92, command: "STOP", connected: true },
+  { id: "R2", ip: "192.168.1.102", battery: 84, command: "STOP", connected: true },
+  { id: "R3", ip: "192.168.1.103", battery: 67, command: "STOP", connected: false },
+  { id: "R4", ip: "192.168.1.104", battery: 51, command: "STOP", connected: true },
+  { id: "R5", ip: "192.168.1.105", battery: 76, command: "STOP", connected: false }
+];
+
+const logLines = [];
+
+function render() {
+  document.getElementById("robotGrid").innerHTML = robots.map(r => `
+    <div class="card">
+      <div class="robot-head">
+        <div class="robot-name">${r.id}</div>
+        <div class="${r.connected ? "online" : "offline"}">
+          ● ${r.connected ? "ONLINE" : "OFFLINE"}
+        </div>
+      </div>
+      <div class="telemetry">
+        <div class="metric"><small>IP</small>${r.ip}</div>
+        <div class="metric"><small>Battery</small>${r.battery}%</div>
+        <div class="metric"><small>Command</small>${r.command}</div>
+        <div class="metric"><small>Speed</small>50%</div>
+      </div>
+      <div class="controls">
+        <span></span>
+        <button onclick="sendCommand('${r.id}','FORWARD',50)">▲</button>
+        <span></span>
+        <button onclick="sendCommand('${r.id}','LEFT',40)">◀</button>
+        <button class="stop" onclick="sendCommand('${r.id}','STOP',0)">STOP</button>
+        <button onclick="sendCommand('${r.id}','RIGHT',40)">▶</button>
+        <span></span>
+        <button onclick="sendCommand('${r.id}','BACKWARD',50)">▼</button>
+        <span></span>
+        <button class="wide" onclick="sendCommand('${r.id}','STOP',0)">Emergency Stop</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function sendCommand(id, command, speed) {
+  const robot = robots.find(r => r.id === id);
+  if (!robot) return;
+  robot.command = command;
+  const line = `[${new Date().toLocaleTimeString()}] ${id} <- ${command} ${speed}`;
+  logLines.unshift(line);
+  document.getElementById("log").innerHTML = logLines.slice(0, 30).join("<br>");
+  document.getElementById("fullLog").innerHTML = logLines.join("<br>");
+  render();
+}
+
+function showPanel(id, button) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+  button.classList.add("active");
+}
+
+setInterval(() => {
+  document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+render();
+</script>
+</body>
+</html>
