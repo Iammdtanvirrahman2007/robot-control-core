@@ -116,26 +116,25 @@ let api=mockRobotApi; // const api=realRobotApi;
 
 /* ========== app state + helpers ========== */
 const $=s=>document.querySelector(s),ts=()=>new Date().toTimeString().slice(0,8);
-const robots=[],mk=(id,type,n)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,connected:false,logs:[],exec:'STOPPED',tab:0});
-[['R1','spider'],['R2','bird'],['R3','factory'],['R4','wheeled']].forEach((x,i)=>robots.push(mk(x[0],x[1],i+1)));
-let cur=robots[0];
+const robots=[],mk=(id,type='spider',n=1)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,connected:false,logs:[],exec:'STOPPED',tab:0});
+let cur=null;
 const STATES=['BUILDING','RUNNING','WAITING FOR SENSOR DATA','SENDING COMMAND','ROBOT EXECUTING','STOPPED','ERROR'];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const row=(n,v,f)=>`<div class=row><span>${esc(n)}</span><b>${esc(v)}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
 
 function paintNav(){const on=robots.filter(r=>r.connected).length;
- $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${r.id} ${FIRMWARE[r.type].label}<small>${r.connected?r.ip:'offline'}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
+ $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${esc(r.id)} ${esc(FIRMWARE[r.type]?.label||r.type)}<small>${esc(r.connected?r.ip:'offline')}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
  $('#gs').innerHTML=`<i class="d ${on?'on':''}" style="display:inline-block"></i> ${on} connected`;
  document.querySelectorAll('.rb[data-i]').forEach(b=>b.onclick=()=>{cur=robots[+b.dataset.i];paintNav();show()});
- $('#add').onclick=()=>{const n=robots.length+1,r=mk('R'+n,'spider',n);robots.push(r);cur=r;paintNav();show()}}
-function paintBar(){const r=cur,s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
+ $('#add').onclick=()=>{const n=robots.length+1,r=mk('', 'spider', n);robots.push(r);cur=r;paintNav();show()}}
+function paintBar(){const r=cur;if(!r){$('#sb').innerHTML='<span>No robot created</span><span style="margin-left:auto">bridge: mock (no backend)</span>';return}const s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
 
 /* ========== pages: connect screen ========== */
-function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CONNECT ROBOT</h3><p class=note>The robot's ESP32 reports its own hardware description after connecting. The workspace is generated from it.</p>
-<label>Robot ID</label><input id=fi value="${r.id}"><label>Robot Type (as reported by firmware)</label><select id=ft>${Object.keys(FIRMWARE).map(k=>`<option value=${k} ${k==r.type?'selected':''}>${k.toUpperCase()}</option>`).join('')}</select>
+function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CREATE / CONNECT ROBOT</h3><p class=note>The robot's ESP32 reports its own hardware description after connecting. The workspace is generated from it.</p>
+<label>Robot Name / ID</label><input id=fi value="${esc(r.id)}" placeholder="e.g. Spider-01" autocomplete="off"><label>Robot Type (as reported by firmware)</label><select id=ft>${Object.keys(FIRMWARE).map(k=>`<option value=${k} ${k==r.type?'selected':''}>${k.toUpperCase()}</option>`).join('')}</select>
 <label>Connection</label><select><option>Wi-Fi</option></select><label>IP Address</label><input id=fip value="${r.ip}"><label>Port</label><input id=fp value="${r.port}">
 <p><button class="btn pri" id=cb>CONNECT</button></p><div id=hs></div></div>`;
- $('#cb').onclick=async()=>{r.id=$('#fi').value||r.id;r.type=$('#ft').value;r.ip=$('#fip').value;r.port=$('#fp').value;$('#cb').disabled=true;const h=$('#hs'),add=t=>h.innerHTML+=t+'<br>';
+ $('#cb').onclick=async()=>{const name=$('#fi').value.trim();if(!name){$('#hs').innerHTML='<span style="color:var(--rd)">Robot name is required.</span>';return}if(robots.some(x=>x!==r&&x.id.toLowerCase()===name.toLowerCase())){$('#hs').innerHTML='<span style="color:var(--rd)">A robot with this name already exists.</span>';return}r.id=name;r.type=$('#ft').value;r.ip=$('#fip').value;r.port=$('#fp').value;$('#cb').disabled=true;const h=$('#hs'),add=t=>h.innerHTML+=t+'<br>';
   add(`Connecting to ${r.ip}:${r.port} ...`);await api.connect(r);add('<span class=ok>Connected ✓</span>');add('Receiving robot configuration...');
   const cfg=await api.getHardwareDescription(r);add(`Sensors detected: ${cfg.sensors.length}`);add(`Actuators detected: ${cfg.actuators.length}`);await delay(700);init(r,cfg);paintNav();show()}}
 function init(r,cfg){r.cfg=cfg;const sn={},ac={};
@@ -146,7 +145,8 @@ function init(r,cfg){r.cfg=cfg;const sn={},ac={};
  log(r,`Connected to ${r.id}`);r.unsub=api.subscribeTelemetry(r,p=>{const s=r.state;Object.assign(s.sensors,p.sensors);Object.assign(s.actuators,p.actuators);s.battery=p.battery;s.temp=p.temp;r.lat=p.latency;r.rx++;if(r===cur&&r.connected)tick(r)})}
 
 /* ========== pages: robot workspace ========== */
-function show(){cur.connected?showWs():showConnect();paintBar()}
+function show(){if(!cur){showEmpty();paintBar();return}cur.connected?showWs():showConnect();paintBar()}
+function showEmpty(){$('#main').innerHTML='<div class="p form"><h3>NO ROBOT CREATED</h3><p class=note>Create a robot by clicking <b>+ Add Robot</b>. No default robot is loaded.</p></div>'}
 function showWs(){const r=cur,c=r.cfg;
  const api_=Object.entries(c.api).map(([g,f])=>`<div>${g}</div>`+f.map(n=>`<code data-n="${n}">${n}()</code>`).join('')).join('');
  $('#main').innerHTML=`<div class=wh><h2>${r.id} · ${c.label}</h2><span class=tag>${r.type}</span><span>${r.ip}:${r.port}</span><span style="flex:1"></span><button class=btn id=dc>Disconnect</button></div>
