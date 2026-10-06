@@ -19,6 +19,7 @@ const int L_PWM=25, L_DIR=26, R_PWM=27, R_DIR=14;
 const int TRIG=5, ECHO=18;
 
 NetworkServer server(PORT);
+WiFiUDP discovery;
 int leftSpeed=0,rightSpeed=0;
 unsigned long lastCommand=0;
 const unsigned long COMMAND_TIMEOUT_MS=1500;
@@ -70,9 +71,19 @@ void setup(){
   WiFi.mode(WIFI_STA); WiFi.setHostname("robot-control-esp32"); WiFi.begin(WIFI_SSID,WIFI_PASSWORD);
   while(WiFi.status()!=WL_CONNECTED){delay(400);Serial.print(".");}
   Serial.print("\nESP32 IP: ");Serial.println(WiFi.localIP());
-  server.begin(); lastCommand=millis();
+  server.begin();
+  discovery.begin(4210);
+  lastCommand=millis();
 }
 void loop(){
+  int packetSize=discovery.parsePacket();
+  if(packetSize){
+    char q[64]; int n=discovery.read(q,sizeof(q)-1); q[n]=0;
+    if(String(q)=="ROBOT_DISCOVER"){
+      String reply="{\"ip\":\""+WiFi.localIP().toString()+"\",\"port\":5000,\"name\":\"ESP32 Robot\",\"type\":\"wheeled\"}";
+      discovery.beginPacket(discovery.remoteIP(),discovery.remotePort()); discovery.print(reply); discovery.endPacket();
+    }
+  }
   if(millis()-lastCommand>COMMAND_TIMEOUT_MS) stopMotors();
   NetworkClient c=server.accept();
   if(c) handle(c);
