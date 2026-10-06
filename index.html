@@ -1,222 +1,207 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Robot Control Core</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #080b12;
-      color: #e9eef8;
-    }
-    .app { min-height: 100vh; display: flex; }
-    aside {
-      width: 230px; padding: 22px 16px; border-right: 1px solid #1d2430;
-      background: #0c1018; position: fixed; inset: 0 auto 0 0;
-    }
-    .brand { font-weight: 800; font-size: 18px; margin-bottom: 28px; }
-    .brand span { color: #66d9ff; }
-    nav button {
-      width: 100%; padding: 11px 12px; margin: 4px 0; text-align: left;
-      border: 0; border-radius: 9px; background: transparent; color: #9ba7b8;
-      cursor: pointer;
-    }
-    nav button.active, nav button:hover { background: #17202d; color: #fff; }
-    main { margin-left: 230px; width: calc(100% - 230px); padding: 28px; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    h1 { margin: 0; font-size: 25px; }
-    .status { color: #7ee2a8; font-size: 13px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
-    .card {
-      background: #0f141d; border: 1px solid #202a38; border-radius: 14px; padding: 18px;
-    }
-    .robot-head { display:flex; justify-content:space-between; align-items:center; }
-    .robot-name { font-size: 18px; font-weight: 700; }
-    .online { color: #7ee2a8; font-size: 12px; }
-    .offline { color: #ff8b8b; font-size: 12px; }
-    .telemetry { margin: 18px 0; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-    .metric { background:#0a0e15; border-radius:9px; padding:10px; }
-    .metric small { display:block; color:#7f8a9a; margin-bottom:3px; }
-    .controls { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
-    .controls button {
-      border:1px solid #2b3748; background:#151d28; color:#e9eef8;
-      border-radius:8px; padding:10px; cursor:pointer;
-    }
-    .controls button:hover { background:#202b3a; }
-    .controls .stop { background:#3a1e25; border-color:#66323b; }
-    .controls .wide { grid-column:span 3; }
-    .panel { display:none; }
-    .panel.active { display:block; }
-    .log {
-      margin-top: 20px; background:#090d14; border:1px solid #202a38;
-      border-radius:12px; padding:14px; height:180px; overflow:auto;
-      font-family: ui-monospace, monospace; font-size:12px; color:#9eabbc;
-    }
-    @media(max-width:700px) {
-      aside { width:70px; padding:14px 8px; }
-      .brand { font-size:0; text-align:center; }
-      .brand span { font-size:20px; }
-      nav button { font-size:0; text-align:center; }
-      nav button::first-letter { font-size:18px; }
-      main { margin-left:70px; width:calc(100% - 70px); padding:18px; }
-    }
-  </style>
-</head>
-<body>
-<div class="app">
-  <aside>
-    <div class="brand">ROBOT <span>CORE</span></div>
-    <nav>
-      <button class="active" onclick="showPanel('dashboard', this)">◉ Dashboard</button>
-      <button onclick="showPanel('robots', this)">▣ Robots</button>
-      <button onclick="showPanel('network', this)">⌁ Network</button>
-      <button onclick="showPanel('logs', this)">≡ Logs</button>
-    </nav>
-  </aside>
-
-  <main>
-    <section id="dashboard" class="panel active">
-      <header>
-        <div>
-          <h1>Robot Control Center</h1>
-          <div class="status">● Frontend ready · backend bridge not connected</div>
-        </div>
-        <div id="clock"></div>
-      </header>
-      <div class="grid" id="robotGrid"></div>
-      <div class="log" id="log"></div>
-    </section>
-
-    <section id="robots" class="panel">
-      <header><h1>Robots</h1></header>
-      <div class="card">
-        <p>Robot registry will connect to the C++ MultiRobotManager.</p>
-        <p>Phase: <strong>control UI prototype</strong></p>
-      </div>
-    </section>
-
-    <section id="network" class="panel">
-      <header><h1>Network</h1></header>
-      <div class="card">
-        <p>Transport: TCP</p>
-        <p>Target: ESP32</p>
-        <p>Port: 5000</p>
-        <p>Status: <span class="status">Ready</span></p>
-      </div>
-    </section>
-
-    <section id="logs" class="panel">
-      <header><h1>Command Logs</h1></header>
-      <div class="log" id="fullLog"></div>
-    </section>
-  </main>
-</div>
-
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robot Control Platform</title>
+<style>
+:root{--bg:#0d1117;--p:#141a22;--p2:#1a222c;--ln:#27313d;--tx:#d5dde6;--mu:#7d8b9a;--ac:#38d6c4;--am:#f2b84b;--rd:#ff6b6b;--gn:#5fd68a;--mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;--sans:"Inter","Segoe UI",system-ui,sans-serif;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+*{box-sizing:inherit}html,body{height:100%;margin:0}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--tx);font:13px/1.4 var(--sans);overflow:hidden}
+#app{height:100%;display:grid;grid-template:44px 1fr 26px/208px 1fr}
+header{grid-column:1/3;display:flex;align-items:center;gap:16px;padding:0 14px;background:var(--p);border-bottom:1px solid var(--ln)}
+header b{font-size:14px;letter-spacing:.04em}header span{color:var(--mu)}header .sp{flex:1}
+nav{background:var(--p);border-right:1px solid var(--ln);display:flex;flex-direction:column;padding:10px 8px;gap:4px;overflow:auto}
+nav h4{margin:4px 6px 6px;color:var(--mu);font-weight:500}
+.rb{all:unset;cursor:pointer;display:flex;gap:8px;align-items:center;padding:8px;border-radius:6px;border:1px solid transparent}
+.rb:hover{background:var(--p2)}.rb:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.rb.on{background:var(--p2);border-color:var(--ln)}.rb small{display:block;color:var(--mu)}
+.d{width:8px;height:8px;border-radius:50%;background:#4a5563;flex:none}.d.on{background:var(--gn);box-shadow:0 0 6px var(--gn)}
+.add{margin-top:auto;border:1px dashed var(--ln);color:var(--mu)}
+main{overflow:auto;padding:12px;min-width:0}
+footer{grid-column:1/3;display:flex;gap:18px;align-items:center;padding:0 14px;background:var(--p);border-top:1px solid var(--ln);color:var(--mu);font:12px var(--mono)}
+button,input,select{font:inherit;color:var(--tx)}
+.btn{background:var(--p2);border:1px solid var(--ln);border-radius:5px;padding:4px 10px;cursor:pointer}.btn:hover{border-color:var(--ac)}
+.btn.pri{background:var(--ac);color:#06201d;border-color:var(--ac);font-weight:600}.btn.stop{color:var(--rd)}
+.ws{display:grid;grid-template-columns:290px minmax(380px,1fr) 300px;gap:10px;align-items:start}
+.col,.mid{display:flex;flex-direction:column;gap:10px;min-width:0}
+.p{background:var(--p);border:1px solid var(--ln);border-radius:8px;padding:10px 12px}
+.p h3{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--mu);display:flex;justify-content:space-between;letter-spacing:.05em}
+.live{font-style:normal;color:var(--gn);animation:bl 1.4s infinite}@keyframes bl{50%{opacity:.35}}
+.row{position:relative;display:flex;justify-content:space-between;padding:4px 0 6px;border-bottom:1px solid #1d2630}
+.row b{font:600 12px var(--mono);animation:fl .5s}@keyframes fl{from{color:var(--ac)}}
+.row i{position:absolute;left:0;bottom:0;height:2px;width:calc(var(--f)*100%);background:var(--ac);opacity:.55;transition:width .4s}
+.grp{margin-top:6px;color:var(--mu);font-size:11px}
+.wh{display:flex;align-items:center;gap:14px;margin-bottom:10px}.wh h2{margin:0;font-size:18px}.wh span{color:var(--mu)}
+.tag{background:#12362f;color:var(--ac);border-radius:4px;padding:1px 7px;font:11px var(--mono)}
+.tb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.tabs{display:flex;gap:2px;flex:1}.tab{all:unset;cursor:pointer;padding:4px 12px;border-radius:5px 5px 0 0;color:var(--mu);font:12px var(--mono)}.tab.on{background:var(--p2);color:var(--tx);box-shadow:inset 0 -2px var(--ac)}
+.ed{position:relative;height:300px;background:#0a0e13;border:1px solid var(--ln);border-radius:5px;overflow:hidden;font:13px/20px var(--mono)}
+.ed>*{position:absolute;top:0;bottom:0;margin:0;padding:8px 10px;font:inherit;tab-size:4;white-space:pre}
+#ln{left:0;width:42px;color:#4b5868;text-align:right;overflow:hidden;background:#0c1118;border-right:1px solid var(--ln)}
+#hl,#ta{left:42px;right:0}#hl{overflow:hidden;pointer-events:none}
+#ta{background:transparent;color:transparent;caret-color:var(--ac);border:0;resize:none;outline:0;overflow:auto}
+.k{color:#c792ea}.c{color:#5c6b7a;font-style:italic}.n{color:var(--am)}.f{color:#7fb8ff}.r{color:var(--ac)}
+#err{margin-top:6px;color:var(--rd);font:12px var(--mono);min-height:16px}
+.pills{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}.pill{font:11px var(--mono);padding:2px 8px;border-radius:10px;border:1px solid var(--ln);color:var(--mu)}
+.pill.on{color:#06201d;background:var(--ac);border-color:var(--ac)}.pill.on.e{background:var(--rd);border-color:var(--rd)}
+#con{height:160px;overflow:auto;background:#0a0e13;border:1px solid var(--ln);border-radius:5px;padding:6px 8px;font:12px/1.55 var(--mono)}
+#con .t{color:#4b5868}#con .cm{color:var(--am)}#con .er{color:var(--rd)}
+.mc{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.mc.dp{grid-template-columns:repeat(3,1fr)}
+.mc .btn{padding:8px 4px;text-align:center}.mc .btn:active{background:var(--ac);color:#06201d}
+.api{font:12px var(--mono);max-height:190px;overflow:auto}.api div{color:var(--mu);margin-top:6px}.api code{display:block;color:#7fb8ff;padding-left:10px;cursor:pointer}
+canvas{width:100%;border-radius:5px;background:#05080c;display:block}
+.cm2{display:flex;justify-content:space-between;color:var(--mu);font:11px var(--mono);margin-top:5px}
+.lane{position:relative;height:16px;margin:3px 0;border-bottom:1px dashed #33414f;font:10px var(--mono);color:var(--mu)}
+.lane::after{content:"";position:absolute;bottom:-3px;width:6px;height:6px;border-radius:50%;background:var(--ac);animation:tx 1.2s linear infinite}
+.lane.rx::after{background:var(--am);animation-name:rx}@keyframes tx{from{left:0}to{left:100%}}@keyframes rx{from{left:100%}to{left:0}}
+.form{max-width:440px;margin:6vh auto}.form label{display:block;margin:10px 0 3px;color:var(--mu)}
+.form input,.form select{width:100%;background:var(--p2);border:1px solid var(--ln);border-radius:5px;padding:7px 9px}
+#hs{margin-top:14px;font:12px/1.7 var(--mono);color:var(--mu)}#hs .ok{color:var(--gn)}
+.note{color:var(--mu);font-size:12px;margin:0 0 10px}
+@media(max-width:1180px){.ws{grid-template-columns:1fr 1fr}.mid{grid-column:1/3;order:-1}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head><body>
+<div id="app">
+<header><b>ROBOT CONTROL PLATFORM</b><span>Brain: this laptop &nbsp;|&nbsp; Body: ESP32 over Wi-Fi</span><i class="sp"></i><span id="gs"></span></header>
+<nav id="nav"></nav><main id="main"></main>
+<footer id="sb"></footer></div>
 <script>
-const robots = [
-  { id: "R1", ip: "192.168.1.101", battery: 92, command: "STOP", connected: true },
-  { id: "R2", ip: "192.168.1.102", battery: 84, command: "STOP", connected: true },
-  { id: "R3", ip: "192.168.1.103", battery: 67, command: "STOP", connected: false },
-  { id: "R4", ip: "192.168.1.104", battery: 51, command: "STOP", connected: true },
-  { id: "R5", ip: "192.168.1.105", battery: 76, command: "STOP", connected: false }
-];
+/* ========== models/robot.js — what each ESP32 firmware reports (mock hardware descriptions) ========== */
+const N=(id,name,unit,min,max)=>({id,name,unit,min,max,kind:'n'});
+const IMU={id:'imu',name:'IMU',kind:'imu'},GPS={id:'gps',name:'GPS',kind:'gps'};
+const AC=(id,name,type,min,max,unit)=>({id,name,type,min,max,unit});
+const legs=Array.from({length:8},(_,i)=>AC('leg_'+(i+1),'Leg '+(i+1),'servo',20,100,'°'));
+const LOOP=(c,a,b)=>`while (robot.connected())\n{\n    if (${c})\n    {\n${a}\n    }\n    else\n    {\n${b}\n    }\n}`;
+const FIRMWARE={
+spider:{label:'Spider',camera:false,panel:'LEG CONTROL',
+ sensors:[N('front_distance','Front Distance','cm',5,120),N('left_distance','Left Distance','cm',5,120),N('right_distance','Right Distance','cm',5,120),IMU,N('leg_encoders','Leg Encoders','tick',0,500)],
+ actuators:legs,
+ controls:['Walk Forward','Walk Backward','Turn Left','Turn Right','Stand','Sit'],
+ api:{Movement:['walk_forward','walk_backward','turn_left','turn_right','stand','sit','stop'],Sensors:['front_distance','left_distance','right_distance','imu'],Legs:['leg','set_leg_angle']},
+ dec:['front_distance',30,'TURN_LEFT 60','WALK_FORWARD 70'],
+ code:LOOP('robot.front_distance() < 30','        robot.stop();\n        robot.turn_left(60);','        robot.walk_forward(70);')},
+bird:{label:'Bird',camera:true,panel:'FLIGHT CONTROL',
+ sensors:[IMU,GPS,N('altitude','Altitude','m',5,60)],
+ actuators:[AC('wing_l','Left Wing','servo',0,90,'°'),AC('wing_r','Right Wing','servo',0,90,'°'),AC('tail','Tail','servo',0,60,'°'),AC('motor','Flight Motor','motor',0,100,'%')],
+ controls:['Takeoff','Land','Forward','Backward','Turn Left','Turn Right','Increase Altitude','Decrease Altitude'],
+ api:{Flight:['fly_forward','fly_backward','turn_left','turn_right','increase_altitude','decrease_altitude','takeoff','land'],Sensors:['camera','gps','altitude','imu']},
+ dec:['altitude',20,'INCREASE_ALTITUDE 20','FLY_FORWARD 70'],
+ code:LOOP('robot.camera.detect_obstacle()','        robot.turn_right(40);\n        robot.increase_altitude(20);','        robot.fly_forward(70);')},
+factory:{label:'Factory Robot',camera:true,panel:'ARM & CONVEYOR',
+ sensors:[N('conveyor_rpm','Conveyor Speed','rpm',0,120),N('part_count','Part Count','pcs',0,500),N('arm_torque','Arm Torque','Nm',0,40),N('vibration','Vibration','mm/s',0,10)],
+ actuators:[AC('base','Base Joint','servo',0,180,'°'),AC('shoulder','Shoulder','servo',0,150,'°'),AC('elbow','Elbow','servo',0,150,'°'),AC('gripper','Gripper','servo',0,80,'mm'),AC('conveyor','Conveyor Motor','motor',0,100,'%')],
+ controls:['Home Arm','Pick','Place','Start Conveyor','Stop Conveyor','E-Stop'],
+ api:{Arm:['arm_home','arm_pick','arm_place','set_joint','gripper'],Conveyor:['conveyor_speed','conveyor_stop'],Sensors:['camera','vibration','arm_torque','part_count','conveyor_rpm'],Safety:['emergency_stop']},
+ dec:['vibration',6,'CONVEYOR_SPEED 40','CONVEYOR_SPEED 80'],
+ code:LOOP('robot.vibration() > 6.0','        robot.conveyor_speed(40);','        robot.camera.part_detected();\n        robot.arm_pick();\n        robot.arm_place();\n        robot.conveyor_speed(80);')},
+wheeled:{label:'Wheeled Robot',camera:false,panel:'DRIVETRAIN',dpad:1,
+ sensors:[N('front_distance','Front Distance','cm',5,150),N('line_sensor','Line Sensor','raw',0,1023),N('enc_l','Encoder L','tick',0,9999),N('enc_r','Encoder R','tick',0,9999),IMU],
+ actuators:[AC('motor_l','Left Motor','motor',-100,100,'%'),AC('motor_r','Right Motor','motor',-100,100,'%'),AC('pan','Pan Servo','servo',0,180,'°')],
+ controls:[null,'Forward',null,'Left','Stop','Right',null,'Back',null],
+ api:{Drive:['drive_forward','drive_backward','turn_left','turn_right','stop'],Sensors:['front_distance','line_sensor','encoders','imu'],Motors:['set_motor']},
+ dec:['front_distance',25,'TURN_RIGHT 50','DRIVE_FORWARD 80'],
+ code:LOOP('robot.front_distance() < 25','        robot.stop();\n        robot.turn_right(50);','        robot.drive_forward(80);')}};
 
-const logLines = [];
-const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* ========== api/robotApi.js — swap mockRobotApi for realRobotApi later; UI only calls `api` ========== */
+const delay=ms=>new Promise(r=>setTimeout(r,ms)),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rnd=()=>Math.random()-.5;
+const walk=(v,d,k=.2)=>clamp(v+rnd()*(d.max-d.min)*k,d.min,d.max);
+const mockRobotApi={
+ async connect(r){await delay(500);return{ok:true}},
+ async getHardwareDescription(r){await delay(700);return JSON.parse(JSON.stringify(FIRMWARE[r.type]))},
+ async sendCommand(r,cmd){await delay(30);return{ok:true}},
+ subscribeTelemetry(r,cb){const t=setInterval(()=>{const s=r.state,p={sensors:{},actuators:{}};
+  for(const d of r.cfg.sensors){const v=s.sensors[d.id];p.sensors[d.id]=d.kind=='n'?walk(v,d):d.kind=='imu'?{x:.12+rnd()*.1,y:-.03+rnd()*.1,z:1.01+rnd()*.04}:{lat:v.lat+rnd()*1e-5,lon:v.lon+rnd()*1e-5}}
+  for(const a of r.cfg.actuators)p.actuators[a.id]=walk(s.actuators[a.id],a,.06);
+  p.battery=Math.max(5,s.battery-.01);p.temp=s.temp+rnd()*.3;p.latency=12+Math.random()*28|0;cb(p)},500);return()=>clearInterval(t)}};
+let api=mockRobotApi; // const api=realRobotApi;
 
-function render() {
-  document.getElementById("robotGrid").innerHTML = robots.map(r => `
-    <div class="card">
-      <div class="robot-head">
-        <div class="robot-name">${esc(r.id)}</div>
-        <div class="${r.connected ? "online" : "offline"}">
-          ● ${r.connected ? "ONLINE" : "OFFLINE"}
-        </div>
-      </div>
-      <div class="telemetry">
-        <div class="metric"><small>IP</small>${esc(r.ip)}</div>
-        <div class="metric"><small>Battery</small>${r.battery}%</div>
-        <div class="metric"><small>Command</small>${r.command}</div>
-        <div class="metric"><small>Speed</small>50%</div>
-      </div>
-      <div class="controls">
-        <span></span>
-        <button onclick="sendCommand('${r.id}','FORWARD',50)">▲</button>
-        <span></span>
-        <button onclick="sendCommand('${r.id}','LEFT',40)">◀</button>
-        <button class="stop" onclick="sendCommand('${r.id}','STOP',0)">STOP</button>
-        <button onclick="sendCommand('${r.id}','RIGHT',40)">▶</button>
-        <span></span>
-        <button onclick="sendCommand('${r.id}','BACKWARD',50)">▼</button>
-        <span></span>
-        <button class="wide" onclick="sendCommand('${r.id}','STOP',0)">Emergency Stop</button>
-      </div>
-    </div>
-  `).join("");
-}
+/* ========== app state + helpers ========== */
+const $=s=>document.querySelector(s),ts=()=>new Date().toTimeString().slice(0,8);
+const robots=[],mk=(id,type,n)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,connected:false,logs:[],exec:'STOPPED',tab:0});
+[['R1','spider'],['R2','bird'],['R3','factory'],['R4','wheeled']].forEach((x,i)=>robots.push(mk(x[0],x[1],i+1)));
+let cur=robots[0];
+const STATES=['BUILDING','RUNNING','WAITING FOR SENSOR DATA','SENDING COMMAND','ROBOT EXECUTING','STOPPED','ERROR'];
+const row=(n,v,f)=>`<div class=row><span>${n}</span><b>${v}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
 
-async function sendCommand(id, command, speed) {
-  const robot = robots.find(r => r.id === id);
-  if (!robot) return;
+function paintNav(){const on=robots.filter(r=>r.connected).length;
+ $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${r.id} ${FIRMWARE[r.type].label}<small>${r.connected?r.ip:'offline'}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
+ $('#gs').innerHTML=`<i class="d ${on?'on':''}" style="display:inline-block"></i> ${on} connected`;
+ document.querySelectorAll('.rb[data-i]').forEach(b=>b.onclick=()=>{cur=robots[+b.dataset.i];paintNav();show()});
+ $('#add').onclick=()=>{const n=robots.length+1,r=mk('R'+n,'spider',n);robots.push(r);cur=r;paintNav();show()}}
+function paintBar(){const r=cur,s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
 
-  const line = `[${new Date().toLocaleTimeString()}] ${id} -> ${command} ${speed}`;
-  logLines.unshift(esc(line));
+/* ========== pages: connect screen ========== */
+function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CONNECT ROBOT</h3><p class=note>The robot's ESP32 reports its own hardware description after connecting. The workspace is generated from it.</p>
+<label>Robot ID</label><input id=fi value="${r.id}"><label>Robot Type (as reported by firmware)</label><select id=ft>${Object.keys(FIRMWARE).map(k=>`<option value=${k} ${k==r.type?'selected':''}>${k.toUpperCase()}</option>`).join('')}</select>
+<label>Connection</label><select><option>Wi-Fi</option></select><label>IP Address</label><input id=fip value="${r.ip}"><label>Port</label><input id=fp value="${r.port}">
+<p><button class="btn pri" id=cb>CONNECT</button></p><div id=hs></div></div>`;
+ $('#cb').onclick=async()=>{r.id=$('#fi').value||r.id;r.type=$('#ft').value;r.ip=$('#fip').value;r.port=$('#fp').value;$('#cb').disabled=true;const h=$('#hs'),add=t=>h.innerHTML+=t+'<br>';
+  add(`Connecting to ${r.ip}:${r.port} ...`);await api.connect(r);add('<span class=ok>Connected ✓</span>');add('Receiving robot configuration...');
+  const cfg=await api.getHardwareDescription(r);add(`Sensors detected: ${cfg.sensors.length}`);add(`Actuators detected: ${cfg.actuators.length}`);await delay(700);init(r,cfg);paintNav();show()}}
+function init(r,cfg){r.cfg=cfg;const sn={},ac={};
+ cfg.sensors.forEach(d=>sn[d.id]=d.kind=='n'?d.min+(d.max-d.min)*(.4+Math.random()*.4):d.kind=='imu'?{x:.12,y:-.03,z:1.01}:{lat:37.4219,lon:-122.084});
+ cfg.actuators.forEach(a=>ac[a.id]=a.min+(a.max-a.min)*.5);
+ r.state={connected:true,battery:87,temp:31.4,currentCommand:'IDLE',speed:0,sensors:sn,actuators:ac,camera:{fps:30,res:'1280 × 720',status:'Streaming'},errors:[]};
+ r.connected=true;r.tx=0;r.rx=0;r.exec='STOPPED';r.tabs=[{name:'brain.cpp',code:cfg.code},{name:'behaviors.cpp',code:`// reusable behaviors for ${r.type}\nvoid avoid_obstacle()\n{\n    robot.stop();\n}`}];
+ log(r,`Connected to ${r.id}`);r.unsub=api.subscribeTelemetry(r,p=>{const s=r.state;Object.assign(s.sensors,p.sensors);Object.assign(s.actuators,p.actuators);s.battery=p.battery;s.temp=p.temp;r.lat=p.latency;r.rx++;if(r===cur&&r.connected)tick(r)})}
 
-  try {
-    const response = await fetch(
-      `http://localhost:8080/api/command?robot=${encodeURIComponent(id)}&action=${encodeURIComponent(command)}&speed=${speed}`
-    );
-    const result = await response.json();
+/* ========== pages: robot workspace ========== */
+function show(){cur.connected?showWs():showConnect();paintBar()}
+function showWs(){const r=cur,c=r.cfg;
+ const api_=Object.entries(c.api).map(([g,f])=>`<div>${g}</div>`+f.map(n=>`<code data-n="${n}">${n}()</code>`).join('')).join('');
+ $('#main').innerHTML=`<div class=wh><h2>${r.id} · ${c.label}</h2><span class=tag>${r.type}</span><span>${r.ip}:${r.port}</span><span style="flex:1"></span><button class=btn id=dc>Disconnect</button></div>
+<div class=ws><section class=col><div class=p><h3>SENSORS <em class=live>● LIVE</em></h3><div id=sens></div></div><div class=p><h3>${c.panel} <em class=live>● LIVE</em></h3><div id=act></div></div></section>
+<section class=mid><div class=p><h3>ROBOT BRAIN · runs on this laptop, sends commands to the ESP32</h3><div class=tb><div class=tabs id=tabs></div>
+<button class=btn id=bb>Build</button><button class="btn pri" id=br>▶ Run</button><button class="btn stop" id=bs>■ Stop</button><button class=btn id=bf>Format</button><button class=btn id=bv>Save</button><button class=btn id=bx>Clear</button></div>
+<div class=ed><pre id=ln></pre><pre id=hl></pre><textarea id=ta spellcheck=false aria-label="Code editor"></textarea></div><div id=err></div></div>
+<div class=p><h3>EXECUTION</h3><div class=pills id=pills></div><div id=con></div></div></section>
+<section class=col>${c.camera?`<div class=p><h3>CAMERA</h3><canvas id=cv width=320 height=180></canvas><div class=cm2 id=cinfo></div></div>`:''}
+<div class=p><h3>MANUAL CONTROL</h3><div class="mc ${c.dpad?'dp':''}">${c.controls.map(x=>x?`<button class=btn data-c="${x}">${x}</button>`:'<span></span>').join('')}</div></div>
+<div class=p><h3>${r.type.toUpperCase()} API</h3><div class=api>${api_}</div></div>
+<div class=p><h3>COMMUNICATION</h3><div class=cm2><span>LAPTOP</span><span>ESP32</span></div><div class=lane>COMMANDS · Wi-Fi/TCP</div><div class="lane rx">TELEMETRY · Wi-Fi/TCP</div><div class=cm2 id=cstat></div></div></section></div>`;
+ $('#dc').onclick=()=>{stop(r,1);r.unsub&&r.unsub();r.connected=false;paintNav();show()};
+ document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>manual(r,b.dataset.c));
+ document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>insert(b.dataset.n));
+ $('#bb').onclick=()=>build(r);$('#br').onclick=()=>run(r);$('#bs').onclick=()=>stop(r);$('#bx').onclick=()=>{ta.value='';edit()};
+ $('#bf').onclick=()=>{ta.value=fmt(ta.value);edit()};$('#bv').onclick=()=>{r.tabs[r.tab].code=ta.value;log(r,`Saved ${r.tabs[r.tab].name}`)};
+ const ta=$('#ta');ta.oninput=edit;ta.onscroll=()=>{$('#hl').scrollTop=$('#ln').scrollTop=ta.scrollTop;$('#hl').scrollLeft=ta.scrollLeft};
+ ta.onkeydown=e=>{if(e.key=='Tab'){e.preventDefault();document.execCommand('insertText',false,'    ')}
+  if((e.ctrlKey||e.metaKey)&&e.key=='s'){e.preventDefault();$('#bv').click()}if((e.ctrlKey||e.metaKey)&&e.key=='Enter'){e.preventDefault();run(r)}};
+ tabs();tick(r);paintLog(r);paintPills(r);if(c.camera)cam()}
+function tabs(){const r=cur;$('#tabs').innerHTML=r.tabs.map((t,i)=>`<button class="tab ${i==r.tab?'on':''}" data-t="${i}">${t.name}</button>`).join('');
+ document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{r.tabs[r.tab].code=$('#ta').value;r.tab=+b.dataset.t;tabs()});$('#ta').value=r.tabs[r.tab].code;edit(1)}
+function edit(sk){const r=cur,v=$('#ta').value;r.tabs[r.tab].code=v;$('#hl').innerHTML=hl(v)+'\n';$('#ln').textContent=v.split('\n').map((_,i)=>i+1).join('\n');if(!sk)$('#err').textContent=''}
+function hl(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/(\/\/.*)|\b(while|if|else|for|return|true|false|int|float|bool|auto|void|const)\b|\b(\d+(?:\.\d+)?)\b|\b(robot)\b|\b([a-z_]\w*)(?=\()/g,(m,c,k,n,r,f)=>c?`<span class=c>${c}</span>`:k?`<span class=k>${k}</span>`:n?`<span class=n>${n}</span>`:r?`<span class=r>${r}</span>`:`<span class=f>${f}</span>`)}
+function fmt(c){let d=0;return c.split('\n').map(l=>{l=l.trim();const cl=l.startsWith('}');if(cl)d=Math.max(0,d-1);const o='    '.repeat(d)+l;d+=(l.match(/\{/g)||[]).length-(l.match(/\}/g)||[]).length+(cl?1:0);return l?o:''}).join('\n')}
+function insert(n){const ta=$('#ta');ta.focus();document.execCommand('insertText',false,`robot.${n}();`)}
+function tick(r){if(r!==cur)return;const s=r.state,c=r.cfg;let h='';
+ for(const d of c.sensors){const v=s.sensors[d.id];h+=d.kind=='n'?row(d.name,v.toFixed(1)+' '+d.unit,(v-d.min)/(d.max-d.min)):d.kind=='imu'?`<div class=grp>IMU</div>`+['x','y','z'].map(k=>row(k.toUpperCase(),v[k].toFixed(2))).join(''):`<div class=grp>GPS</div>`+row('Lat',v.lat.toFixed(5))+row('Lon',v.lon.toFixed(5))}
+ const se=$('#sens');if(!se)return;se.innerHTML=h+row('Battery',s.battery.toFixed(0)+'%',s.battery/100)+row('Temperature',s.temp.toFixed(1)+' °C');
+ $('#act').innerHTML=c.actuators.map(a=>row(a.name,s.actuators[a.id].toFixed(0)+a.unit,(s.actuators[a.id]-a.min)/(a.max-a.min))).join('');
+ if($('#cinfo'))$('#cinfo').innerHTML=`<span>FPS: ${s.camera.fps}</span><span>${s.camera.res}</span><span>${s.camera.status}</span>`;
+ $('#cstat').innerHTML=`<span>latency ${r.lat} ms</span><span>TX ${r.tx}</span><span>RX ${r.rx}</span><span style="color:var(--gn)">link up</span>`;paintBar()}
+function cam(){const cv=$('#cv');if(!cv)return;const x=cv.getContext('2d');let t=0;(function f(){if($('#cv')!==cv)return;t+=.02;x.fillStyle='#05080c';x.fillRect(0,0,320,180);x.strokeStyle='#15303a';
+ for(let i=0;i<320;i+=32){x.beginPath();x.moveTo(i,0);x.lineTo(i,180);x.stroke()}for(let j=0;j<180;j+=30){x.beginPath();x.moveTo(0,j);x.lineTo(320,j);x.stroke()}
+ const bx=140+Math.sin(t)*70,by=80+Math.cos(t*.7)*30;x.strokeStyle='#f2b84b';x.strokeRect(bx,by,50,40);x.fillStyle='#f2b84b';x.font='10px monospace';x.fillText('obstacle 0.87',bx,by-4);
+ x.fillStyle='rgba(56,214,196,.25)';x.fillRect(0,(t*60)%180,320,2);x.fillStyle='#38d6c4';x.fillText('● LIVE '+cur.id,8,14);requestAnimationFrame(f)})()}
 
-    if (result.ok) {
-      robot.command = command;
-      logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] OK: ${result.message}`));
-    } else {
-      logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] ERROR: ${result.message}`));
-    }
-  } catch (error) {
-    logLines.unshift(esc(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`));
-  }
-
-  document.getElementById("log").innerHTML =
-    logLines.slice(0, 30).join("<br>");
-  document.getElementById("fullLog").innerHTML =
-    logLines.join("<br>");
-  render();
-}
-
-async function emergencyStop() {
-  logLines.unshift(`[${new Date().toLocaleTimeString()}] EMERGENCY STOP requested`);
-
-  try {
-    const response = await fetch("http://localhost:8080/api/emergency-stop");
-    const result = await response.json();
-    logLines.unshift(`[${new Date().toLocaleTimeString()}] ${result.ok ? "OK" : "ERROR"}: ${result.message}`);
-  } catch (error) {
-    logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`);
-  }
-
-  robots.forEach(r => { r.command = "STOP"; });
-  document.getElementById("log").innerHTML = logLines.slice(0, 30).join("<br>");
-  document.getElementById("fullLog").innerHTML = logLines.join("<br>");
-  render();
-}
-
-function showPanel(id, button) {
-  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
-  button.classList.add("active");
-}
-
-setInterval(() => {
-  document.getElementById("clock").textContent = new Date().toLocaleTimeString();
-}, 1000);
-
-render();
-</script>
-</body>
-</html>
+/* ========== console + execution (mock runtime; real compiler/runtime plugs in later) ========== */
+function log(r,m,cl=''){r.logs.push(`<div><span class=t>[${ts()}]</span> <span class="${cl}">${m}</span></div>`);if(r.logs.length>200)r.logs.shift();if(r===cur)paintLog(r)}
+function paintLog(r){const c=$('#con');if(!c)return;c.innerHTML=r.logs.join('');c.scrollTop=c.scrollHeight}
+function setExec(r,s){r.exec=s;if(r===cur){paintPills(r);paintBar()}}
+function paintPills(r){const p=$('#pills');if(p)p.innerHTML=STATES.map(s=>`<span class="pill ${r.exec==s?'on':''} ${s=='ERROR'?'e':''}">● ${s}</span>`).join('')}
+function manual(r,l){const cmd=l.toUpperCase().replace(/\W+/g,'_').replace(/_$/,''),s=r.state;s.currentCommand=cmd;s.speed=/STOP|LAND|SIT|HOME/.test(cmd)?0:70;r.tx++;api.sendCommand(r,cmd);log(r,`Manual: ${cmd}`,'cm');tick(r)}
+async function build(r){const err=$('#err');err.textContent='';setExec(r,'BUILDING');log(r,'Building brain.cpp on laptop...');await delay(900);
+ const code=r.tabs[0].code,ok=new Set(['connected',...Object.values(r.cfg.api).flat()]);let m,bad;const re=/robot\.(\w+)/g;
+ while((m=re.exec(code)))if(!ok.has(m[1])){bad=`brain.cpp:${code.slice(0,m.index).split('\n').length}: error: 'robot.${m[1]}' is not part of the ${r.type.toUpperCase()} API`;break}
+ const o=(code.match(/\{/g)||[]).length,c=(code.match(/\}/g)||[]).length;if(!bad&&o!=c)bad=`brain.cpp:${code.split('\n').length}: error: expected '}' at end of input`;
+ if(bad){setExec(r,'ERROR');r.state.errors=[bad];log(r,bad,'er');if(r===cur)$('#err').textContent=bad;return false}
+ r.state.errors=[];setExec(r,'STOPPED');log(r,'Build succeeded (0 errors)');return true}
+async function run(r){if(r.timer)return;if(!(await build(r)))return;log(r,'Program started');log(r,`Connected to ${r.id}`);setExec(r,'RUNNING');let ph=0,pend,[sid,th,a,b]=r.cfg.dec;
+ const sd=r.cfg.sensors.find(d=>d.id==sid);
+ r.timer=setInterval(()=>{const s=r.state,k=ph++%3;
+  if(k==0){setExec(r,'WAITING FOR SENSOR DATA');const v=s.sensors[sid];log(r,`${sd.name} = ${v.toFixed(0)} ${sd.unit}`);pend=(sid=='vibration'?v>th:v<th)?a:b;if(pend==a)log(r,`Decision: ${a.split(' ')[0]}`)}
+  else if(k==1){setExec(r,'SENDING COMMAND');log(r,`Command: ${pend}`,'cm');s.currentCommand=pend.split(' ')[0];s.speed=+pend.split(' ')[1];r.tx++;api.sendCommand(r,pend)}
+  else{setExec(r,'ROBOT EXECUTING');log(r,`Command sent to ${r.id}`)}},500)}
+function stop(r,q){if(r.timer){clearInterval(r.timer);r.timer=0;if(!q)log(r,'Program stopped');}r.exec='STOPPED';if(r.state){r.state.currentCommand='STOP';r.state.speed=0}if(!q)setExec(r,'STOPPED')}
+paintNav();show();
+</script></body></html>
