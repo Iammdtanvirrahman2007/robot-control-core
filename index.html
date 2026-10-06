@@ -65,7 +65,7 @@ canvas{width:100%;border-radius:5px;background:#05080c;display:block}
 <nav id="nav"></nav><main id="main"></main>
 <footer id="sb"></footer></div>
 <script>
-/* ========== models/robot.js — what each ESP32 firmware reports (mock hardware descriptions) ========== */
+/* ========== models/robot.js — fallback UI shapes only; real hardware comes from ESP32 ========== */
 const N=(id,name,unit,min,max)=>({id,name,unit,min,max,kind:'n'});
 const IMU={id:'imu',name:'IMU',kind:'imu'},GPS={id:'gps',name:'GPS',kind:'gps'};
 const AC=(id,name,type,min,max,unit)=>({id,name,type,min,max,unit});
@@ -101,22 +101,21 @@ wheeled:{label:'Wheeled Robot',camera:false,panel:'DRIVETRAIN',dpad:1,
  dec:['front_distance',25,'TURN_RIGHT 50','DRIVE_FORWARD 80'],
  code:LOOP('robot.front_distance() < 25','        robot.stop();\n        robot.turn_right(50);','        robot.drive_forward(80);')}};
 
-/* ========== api/robotApi.js — swap mockRobotApi for realRobotApi later; UI only calls `api` ========== */
-const delay=ms=>new Promise(r=>setTimeout(r,ms)),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rnd=()=>Math.random()-.5;
-const walk=(v,d,k=.2)=>clamp(v+rnd()*(d.max-d.min)*k,d.min,d.max);
-const mockRobotApi={
- async connect(r){await delay(500);return{ok:true}},
- async getHardwareDescription(r){await delay(700);return JSON.parse(JSON.stringify(FIRMWARE[r.type]))},
- async sendCommand(r,cmd){await delay(30);return{ok:true}},
- subscribeTelemetry(r,cb){const t=setInterval(()=>{const s=r.state,p={sensors:{},actuators:{}};
-  for(const d of r.cfg.sensors){const v=s.sensors[d.id];p.sensors[d.id]=d.kind=='n'?walk(v,d):d.kind=='imu'?{x:.12+rnd()*.1,y:-.03+rnd()*.1,z:1.01+rnd()*.04}:{lat:v.lat+rnd()*1e-5,lon:v.lon+rnd()*1e-5}}
-  for(const a of r.cfg.actuators)p.actuators[a.id]=walk(s.actuators[a.id],a,.06);
-  p.battery=Math.max(5,s.battery-.01);p.temp=s.temp+rnd()*.3;p.latency=12+Math.random()*28|0;cb(p)},500);return()=>clearInterval(t)}};
-let api=mockRobotApi; // const api=realRobotApi;
+/* ========== api/robotApi.js — real laptop ↔ ESP32 bridge ========== */
+const BRIDGE='http://localhost:8080';
+async function bridge(path,opts={}){const r=await fetch(BRIDGE+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j}
+const realRobotApi={
+ async connect(r){return bridge('/api/connect',{method:'POST',body:JSON.stringify({ip:r.ip,port:+r.port})})},
+ async getHardwareDescription(r){const j=await bridge('/api/hardware',{method:'POST',body:JSON.stringify({ip:r.ip,port:+r.port})});return j.hardware},
+ async sendCommand(r,cmd){return bridge('/api/command',{method:'POST',body:JSON.stringify({ip:r.ip,port:+r.port,command:cmd})})},
+ async telemetry(r){const j=await bridge('/api/telemetry',{method:'POST',body:JSON.stringify({ip:r.ip,port:+r.port})});return j.telemetry},
+ subscribeTelemetry(r,cb){let live=true;const loop=async()=>{if(!live||!r.connected)return;try{const p=await this.telemetry(r);cb(p)}catch(e){r.lastError=e.message;r.connected=false;paintNav();if(r===cur)show();return}setTimeout(loop,500)};loop();return()=>{live=false}}
+};
+let api=realRobotApi;
 
 /* ========== app state + helpers ========== */
 const $=s=>document.querySelector(s),ts=()=>new Date().toTimeString().slice(0,8);
-const robots=[],mk=(id,type='spider',n=1)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,connected:false,logs:[],exec:'STOPPED',tab:0});
+const robots=[],mk=(id='',type='robot',n=1)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,connected:false,logs:[],exec:'STOPPED',tab:0});
 let cur=null;
 const STATES=['BUILDING','RUNNING','WAITING FOR SENSOR DATA','SENDING COMMAND','ROBOT EXECUTING','STOPPED','ERROR'];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -126,17 +125,16 @@ function paintNav(){const on=robots.filter(r=>r.connected).length;
  $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${esc(r.id)} ${esc(FIRMWARE[r.type]?.label||r.type)}<small>${esc(r.connected?r.ip:'offline')}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
  $('#gs').innerHTML=`<i class="d ${on?'on':''}" style="display:inline-block"></i> ${on} connected`;
  document.querySelectorAll('.rb[data-i]').forEach(b=>b.onclick=()=>{cur=robots[+b.dataset.i];paintNav();show()});
- $('#add').onclick=()=>{const n=robots.length+1,r=mk('', 'spider', n);robots.push(r);cur=r;paintNav();show()}}
-function paintBar(){const r=cur;if(!r){$('#sb').innerHTML='<span>No robot created</span><span style="margin-left:auto">bridge: mock (no backend)</span>';return}const s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
+ $('#add').onclick=()=>{const n=robots.length+1,r=mk('', 'robot', n);robots.push(r);cur=r;paintNav();show()}}
+function paintBar(){const r=cur;if(!r){$('#sb').innerHTML='<span>No robot created</span><span style="margin-left:auto">bridge: localhost:8080</span>';return}const s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
 
 /* ========== pages: connect screen ========== */
-function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CREATE / CONNECT ROBOT</h3><p class=note>The robot's ESP32 reports its own hardware description after connecting. The workspace is generated from it.</p>
-<label>Robot Name / ID</label><input id=fi value="${esc(r.id)}" placeholder="e.g. Spider-01" autocomplete="off"><label>Robot Type (as reported by firmware)</label><select id=ft>${Object.keys(FIRMWARE).map(k=>`<option value=${k} ${k==r.type?'selected':''}>${k.toUpperCase()}</option>`).join('')}</select>
-<label>Connection</label><select><option>Wi-Fi</option></select><label>IP Address</label><input id=fip value="${r.ip}"><label>Port</label><input id=fp value="${r.port}">
+function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CREATE / CONNECT ROBOT</h3><p class=note>The laptop connects through the local bridge. The ESP32 reports its real hardware description.</p>
+<label>Robot Name / ID</label><input id=fi value="${esc(r.id)}" placeholder="e.g. Spider-01" autocomplete="off"><label>Connection</label><select><option>Wi-Fi</option></select><label>IP Address</label><input id=fip value="${r.ip}"><label>Port</label><input id=fp value="${r.port}">
 <p><button class="btn pri" id=cb>CONNECT</button></p><div id=hs></div></div>`;
- $('#cb').onclick=async()=>{const name=$('#fi').value.trim();if(!name){$('#hs').innerHTML='<span style="color:var(--rd)">Robot name is required.</span>';return}if(robots.some(x=>x!==r&&x.id.toLowerCase()===name.toLowerCase())){$('#hs').innerHTML='<span style="color:var(--rd)">A robot with this name already exists.</span>';return}r.id=name;r.type=$('#ft').value;r.ip=$('#fip').value;r.port=$('#fp').value;$('#cb').disabled=true;const h=$('#hs'),add=t=>h.innerHTML+=t+'<br>';
-  add(`Connecting to ${r.ip}:${r.port} ...`);await api.connect(r);add('<span class=ok>Connected ✓</span>');add('Receiving robot configuration...');
-  const cfg=await api.getHardwareDescription(r);add(`Sensors detected: ${cfg.sensors.length}`);add(`Actuators detected: ${cfg.actuators.length}`);await delay(700);init(r,cfg);paintNav();show()}}
+ $('#cb').onclick=async()=>{const name=$('#fi').value.trim();if(!name){$('#hs').innerHTML='<span style="color:var(--rd)">Robot name is required.</span>';return}if(robots.some(x=>x!==r&&x.id.toLowerCase()===name.toLowerCase())){$('#hs').innerHTML='<span style="color:var(--rd)">A robot with this name already exists.</span>';return}r.id=name;r.ip=$('#fip').value.trim();r.port=$('#fp').value.trim();$('#cb').disabled=true;const h=$('#hs'),add=t=>h.innerHTML+=t+'<br>';
+  add(`Connecting to ${r.ip}:${r.port} through laptop bridge ...`);await api.connect(r);add('<span class=ok>Connected ✓</span>');add('Receiving robot configuration from ESP32...');
+  const cfg=await api.getHardwareDescription(r);r.type=cfg.type||'robot';add(`Sensors detected: ${cfg.sensors.length}`);add(`Actuators detected: ${cfg.actuators.length}`);await delay(700);init(r,cfg);paintNav();show()}}
 function init(r,cfg){r.cfg=cfg;const sn={},ac={};
  cfg.sensors.forEach(d=>sn[d.id]=d.kind=='n'?d.min+(d.max-d.min)*(.4+Math.random()*.4):d.kind=='imu'?{x:.12,y:-.03,z:1.01}:{lat:37.4219,lon:-122.084});
  cfg.actuators.forEach(a=>ac[a.id]=a.min+(a.max-a.min)*.5);
@@ -180,12 +178,9 @@ function tick(r){if(r!==cur)return;const s=r.state,c=r.cfg;let h='';
  $('#act').innerHTML=c.actuators.map(a=>row(a.name,s.actuators[a.id].toFixed(0)+a.unit,(s.actuators[a.id]-a.min)/(a.max-a.min))).join('');
  if($('#cinfo')){const cam=s.camera;if(cam)$('#cinfo').innerHTML=`<span>FPS: ${esc(cam.fps)}</span><span>${esc(cam.res)}</span><span>${esc(cam.status)}</span>`;else $('#cinfo').textContent='Camera telemetry unavailable';}
  $('#cstat').innerHTML=`<span>latency ${r.lat} ms</span><span>TX ${r.tx}</span><span>RX ${r.rx}</span><span style="color:var(--gn)">link up</span>`;paintBar()}
-function cam(){const cv=$('#cv');if(!cv)return;const x=cv.getContext('2d');if(!x)return;let t=0;(function f(){if(document.body.contains(cv)===false)return;t+=.02;x.fillStyle='#05080c';x.fillRect(0,0,320,180);x.strokeStyle='#15303a';
- for(let i=0;i<320;i+=32){x.beginPath();x.moveTo(i,0);x.lineTo(i,180);x.stroke()}for(let j=0;j<180;j+=30){x.beginPath();x.moveTo(0,j);x.lineTo(320,j);x.stroke()}
- const bx=140+Math.sin(t)*70,by=80+Math.cos(t*.7)*30;x.strokeStyle='#f2b84b';x.strokeRect(bx,by,50,40);x.fillStyle='#f2b84b';x.font='10px monospace';x.fillText('obstacle 0.87',bx,by-4);
- x.fillStyle='rgba(56,214,196,.25)';x.fillRect(0,(t*60)%180,320,2);x.fillStyle='#38d6c4';x.fillText('● LIVE '+cur.id,8,14);requestAnimationFrame(f)})()}
+function cam(){const cv=$('#cv');if(!cv)return;const x=cv.getContext('2d');if(!x)return;x.fillStyle='#05080c';x.fillRect(0,0,320,180);x.fillStyle='#7d8b9a';x.font='12px monospace';x.fillText('Camera stream requires an HTTP/MJPEG endpoint.',10,78);x.fillText('Telemetry is live from the physical ESP32.',10,98)}
 
-/* ========== console + execution (mock runtime; real compiler/runtime plugs in later) ========== */
+/* ========== console + execution: laptop-side Robot API runtime ========== */
 function log(r,m,cl=''){r.logs.push(`<div><span class=t>[${ts()}]</span> <span class="${esc(cl)}">${esc(m)}</span></div>`);if(r.logs.length>200)r.logs.shift();if(r===cur)paintLog(r)}
 function paintLog(r){const c=$('#con');if(!c)return;c.innerHTML=r.logs.join('');c.scrollTop=c.scrollHeight}
 function setExec(r,s){r.exec=s;if(r===cur){paintPills(r);paintBar()}}
