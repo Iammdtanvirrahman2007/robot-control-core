@@ -103,6 +103,7 @@ wheeled:{label:'Wheeled Robot',camera:false,panel:'DRIVETRAIN',dpad:1,
 
 /* ========== api/robotApi.js — real laptop ↔ ESP32 bridge ========== */
 const BRIDGE='http://localhost:8080';
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function bridge(path,opts={}){const r=await fetch(BRIDGE+path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j}
 const realRobotApi={
  async connect(r){return bridge('/api/connect',{method:'POST',body:JSON.stringify({ip:r.ip,port:+r.port})})},
@@ -126,7 +127,7 @@ function paintNav(){const on=robots.filter(r=>r.connected).length;
  $('#gs').innerHTML=`<i class="d ${on?'on':''}" style="display:inline-block"></i> ${on} connected`;
  document.querySelectorAll('.rb[data-i]').forEach(b=>b.onclick=()=>{cur=robots[+b.dataset.i];paintNav();show()});
  $('#add').onclick=()=>{const n=robots.length+1,r=mk('', 'robot', n);robots.push(r);cur=r;paintNav();show()}}
-function paintBar(){const r=cur;if(!r){$('#sb').innerHTML='<span>No robot created</span><span style="margin-left:auto">bridge: localhost:8080</span>';return}const s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: mock (no backend)</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
+function paintBar(){const r=cur;if(!r){$('#sb').innerHTML='<span>No robot created</span><span style="margin-left:auto">bridge: localhost:8080</span>';return}const s=r.state;$('#sb').innerHTML=r.connected?`<span>${r.id} ${r.ip}:${r.port}</span><span>cmd: ${s.currentCommand}</span><span>exec: ${r.exec}</span><span>latency: ${r.lat||'-'} ms</span><span style="margin-left:auto">bridge: localhost:8080</span>`:`<span>${r.id} not connected</span><span style="margin-left:auto">bridge: mock (no backend)</span>`}
 
 /* ========== pages: connect screen ========== */
 function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3>CREATE / CONNECT ROBOT</h3><p class=note>The laptop connects through the local bridge. The ESP32 reports its real hardware description.</p>
@@ -136,9 +137,9 @@ function showConnect(){const r=cur;$('#main').innerHTML=`<div class="p form"><h3
   add(`Connecting to ${r.ip}:${r.port} through laptop bridge ...`);await api.connect(r);add('<span class=ok>Connected ✓</span>');add('Receiving robot configuration from ESP32...');
   const cfg=await api.getHardwareDescription(r);r.type=cfg.type||'robot';add(`Sensors detected: ${cfg.sensors.length}`);add(`Actuators detected: ${cfg.actuators.length}`);await delay(700);init(r,cfg);paintNav();show()}}
 function init(r,cfg){r.cfg=cfg;const sn={},ac={};
- cfg.sensors.forEach(d=>sn[d.id]=d.kind=='n'?d.min+(d.max-d.min)*(.4+Math.random()*.4):d.kind=='imu'?{x:.12,y:-.03,z:1.01}:{lat:37.4219,lon:-122.084});
- cfg.actuators.forEach(a=>ac[a.id]=a.min+(a.max-a.min)*.5);
- r.state={connected:true,battery:87,temp:31.4,currentCommand:'IDLE',speed:0,sensors:sn,actuators:ac,camera:{fps:30,res:'1280 × 720',status:'Streaming'},errors:[]};
+ cfg.sensors.forEach(d=>sn[d.id]=d.kind=='n'?0:d.kind=='imu'?{x:0,y:0,z:0}:{lat:0,lon:0});
+ cfg.actuators.forEach(a=>ac[a.id]=0);
+ r.state={connected:true,battery:0,temp:0,currentCommand:'IDLE',speed:0,sensors:sn,actuators:ac,camera:null,errors:[]};
  r.connected=true;r.tx=0;r.rx=0;r.exec='STOPPED';r.tabs=[{name:'brain.cpp',code:cfg.code},{name:'behaviors.cpp',code:`// reusable behaviors for ${r.type}\nvoid avoid_obstacle()\n{\n    robot.stop();\n}`}];
  log(r,`Connected to ${r.id}`);r.unsub=api.subscribeTelemetry(r,p=>{const s=r.state;Object.assign(s.sensors,p.sensors);Object.assign(s.actuators,p.actuators);s.battery=p.battery;s.temp=p.temp;r.lat=p.latency;r.rx++;if(r===cur&&r.connected)tick(r)})}
 
@@ -192,12 +193,29 @@ async function build(r){if(!r.connected||!r.cfg||!r.state)return false;const err
  const o=(code.match(/\{/g)||[]).length,c=(code.match(/\}/g)||[]).length;if(!bad&&o!=c)bad=`brain.cpp:${code.split('\n').length}: error: expected '}' at end of input`;
  if(bad){setExec(r,'ERROR');r.state.errors=[bad];log(r,bad,'er');if(r===cur)$('#err').textContent=bad;return false}
  r.state.errors=[];setExec(r,'STOPPED');log(r,'Build succeeded (0 errors)');return true}
-async function run(r){if(r.timer)return;if(!(await build(r)))return;log(r,'Program started');log(r,`Connected to ${r.id}`);setExec(r,'RUNNING');let ph=0,pend,[sid,th,a,b]=r.cfg.dec;
- const sd=r.cfg.sensors.find(d=>d.id==sid);
- r.timer=setInterval(()=>{if(!r.connected||!r.state){clearInterval(r.timer);r.timer=0;return}const s=r.state,k=ph++%3;
-  if(k==0){setExec(r,'WAITING FOR SENSOR DATA');const v=s.sensors[sid];log(r,`${sd.name} = ${v.toFixed(0)} ${sd.unit}`);pend=(sid=='vibration'?v>th:v<th)?a:b;if(pend==a)log(r,`Decision: ${a.split(' ')[0]}`)}
-  else if(k==1){setExec(r,'SENDING COMMAND');log(r,`Command: ${pend}`,'cm');const parts=pend.split(' ');api.sendCommand(r,pend).then(res=>{if(!res?.ok)throw new Error('rejected');s.currentCommand=parts[0];s.speed=+parts[1];r.tx++;}).catch(()=>{setExec(r,'ERROR');s.errors=['Command rejected by robot'];log(r,'Command rejected by robot','er')})}
-  else{setExec(r,'ROBOT EXECUTING');log(r,`Command sent to ${r.id}`)}},500)}
+function dslCommand(name,args){
+ const a=(args||'').trim(),v=a?parseFloat(a):70;
+ const map={walk_forward:'WALK_FORWARD',drive_forward:'DRIVE_FORWARD',walk_backward:'WALK_BACKWARD',drive_backward:'DRIVE_BACKWARD',turn_left:'TURN_LEFT',turn_right:'TURN_RIGHT',stop:'STOP',sit:'SIT',stand:'STOP',land:'LAND',takeoff:'FORWARD',fly_forward:'FORWARD',fly_backward:'BACKWARD',increase_altitude:'FORWARD',decrease_altitude:'BACKWARD'};
+ const op=map[name];return op?(op+(op=='STOP'||op=='SIT'||op=='LAND'?' 0':' '+(Number.isFinite(v)?v:70))):null
+}
+function parseBrain(code){
+ const m=code.match(/if\s*\(\s*robot\.(\w+)\(\)\s*(<=|>=|<|>)\s*([\d.]+)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{([\s\S]*?)\}/);
+ if(!m)return null;
+ const sensor=m[1],op=m[2],threshold=parseFloat(m[3]);
+ const cmd=(block)=>{const x=block.match(/robot\.(\w+)\s*\(([^)]*)\)/);return x?dslCommand(x[1],x[2]):null};
+ return {sensor,op,threshold,yes:cmd(m[4]),no:cmd(m[5])};
+}
+async function run(r){if(r.timer)return;if(!(await build(r)))return;
+ const brain=parseBrain(r.tabs[0].code);if(!brain){setExec(r,'ERROR');log(r,'Run requires a supported sensor if/else Robot API block.','er');return}
+ const sd=r.cfg.sensors.find(d=>d.id==brain.sensor);if(!sd){setExec(r,'ERROR');log(r,'Sensor '+brain.sensor+' is not reported by this ESP32.','er');return}
+ log(r,'Program started');setExec(r,'RUNNING');
+ r.timer=setInterval(async()=>{if(!r.connected||!r.state){clearInterval(r.timer);r.timer=0;return}
+  const v=Number(r.state.sensors[brain.sensor]);const hit=brain.op=='<'?v<brain.threshold:brain.op=='>'?v>brain.threshold:brain.op=='<='?v<=brain.threshold:v>=brain.threshold;
+  const cmd=hit?brain.yes:brain.no;if(!cmd){setExec(r,'ERROR');log(r,'No executable Robot API command found in code.','er');return}
+  setExec(r,'WAITING FOR SENSOR DATA');log(r,sd.name+' = '+v.toFixed(1)+' '+(sd.unit||''));setExec(r,'SENDING COMMAND');log(r,'Command: '+cmd,'cm');
+  try{const res=await api.sendCommand(r,cmd);if(!res?.ok)throw new Error('rejected');r.state.currentCommand=cmd.split(' ')[0];r.state.speed=parseFloat(cmd.split(' ')[1])||0;r.tx++;setExec(r,'ROBOT EXECUTING')}catch(e){setExec(r,'ERROR');log(r,'Command rejected: '+e.message,'er')}
+ },700)}
+
 async function stop(r,q){if(r.timer){clearInterval(r.timer);r.timer=0;if(!q)log(r,'Program stopped')}if(r.state){r.state.currentCommand='STOP';r.state.speed=0;r.tx++;try{await api.sendCommand(r,'STOP 0')}catch(e){if(!q)log(r,'Stop command failed','er')}}setExec(r,'STOPPED')}
 paintNav();show();
 </script></body></html>
