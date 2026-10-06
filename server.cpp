@@ -68,7 +68,6 @@ static std::vector<std::string> discoverDevices(){
   }
   close(fd); return devices;
 }
-
 static void sendHttp(int fd,int code,const std::string& body){
   std::string status=code==200?"200 OK":code==400?"400 Bad Request":code==404?"404 Not Found":"500 Internal Server Error";
   std::string h="HTTP/1.1 "+status+"\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Methods: GET,POST,OPTIONS\r\nContent-Length: "+std::to_string(body.size())+"\r\nConnection: close\r\n\r\n";
@@ -82,14 +81,31 @@ static void handle(int fd){
   std::string first=req.substr(0,lineEnd), body=bodyOf(req);
   std::istringstream ss(first); std::string method,path; ss>>method>>path;
   try{
-    if(method=="POST"&&path=="/api/discover"){\n      auto ds=discoverDevices(); std::string body="{\\"ok\\":true,\\"devices\\":[";\n      for(size_t i=0;i<ds.size();++i){if(i) body+=","; body+=ds[i];} body+="]}";\n      sendHttp(fd,200,body); close(fd); return;\n    }\n    if(method=="GET"&&path=="/api/health"){sendHttp(fd,200,"{\"ok\":true,\"service\":\"robot-control-core\",\"transport\":\"HTTP->TCP\"}");close(fd);return;}
+    if(method=="POST"&&path=="/api/discover"){
+      auto ds=discoverDevices();
+      std::string out="{\"ok\":true,\"devices\":[";
+      for(size_t i=0;i<ds.size();++i){if(i) out+=","; out+=ds[i];}
+      out+="]}";
+      sendHttp(fd,200,out); close(fd); return;
+    }
+    if(method=="GET"&&path=="/api/health"){
+      sendHttp(fd,200,"{\"ok\":true,\"service\":\"robot-control-core\",\"transport\":\"HTTP->TCP\"}");
+      close(fd);return;
+    }
     std::string ip=jsonValue(body,"ip"); int port=std::stoi(jsonValue(body,"port").empty()?"5000":jsonValue(body,"port"));
     if(method!="POST"){sendHttp(fd,400,"{\"ok\":false,\"error\":\"POST required\"}");close(fd);return;}
-    if(path=="/api/connect"){auto r=tcpRequest(ip,port,"PING");sendHttp(fd,r=="PONG"||r=="OK"?200:502,"{\"ok\":"+std::string((r=="PONG"||r=="OK")?"true":"false")+",\"reply\":\""+jsonEscape(r)+"\"}");}
-    else if(path=="/api/hardware"){auto r=tcpRequest(ip,port,"GET_HARDWARE");sendHttp(fd,200,"{\"ok\":true,\"hardware\":"+r+"}");}
-    else if(path=="/api/telemetry"){auto r=tcpRequest(ip,port,"GET_TELEMETRY");sendHttp(fd,200,"{\"ok\":true,\"telemetry\":"+r+"}");}
-    else if(path=="/api/command"){auto cmd=jsonValue(body,"command");auto r=tcpRequest(ip,port,"COMMAND "+cmd);sendHttp(fd,200,"{\"ok\":true,\"reply\":\""+jsonEscape(r)+"\"}");}
-    else sendHttp(fd,404,"{\"ok\":false,\"error\":\"unknown endpoint\"}");
+    if(path=="/api/connect"){
+      auto r=tcpRequest(ip,port,"PING");
+      bool ok=(r=="PONG"||r=="OK");
+      sendHttp(fd,ok?200:500,"{\"ok\":"+std::string(ok?"true":"false")+",\"reply\":\""+jsonEscape(r)+"\"}");
+    } else if(path=="/api/hardware"){
+      auto r=tcpRequest(ip,port,"GET_HARDWARE"); sendHttp(fd,200,"{\"ok\":true,\"hardware\":"+r+"}");
+    } else if(path=="/api/telemetry"){
+      auto r=tcpRequest(ip,port,"GET_TELEMETRY"); sendHttp(fd,200,"{\"ok\":true,\"telemetry\":"+r+"}");
+    } else if(path=="/api/command"){
+      auto cmd=jsonValue(body,"command"); auto r=tcpRequest(ip,port,"COMMAND "+cmd);
+      sendHttp(fd,200,"{\"ok\":true,\"reply\":\""+jsonEscape(r)+"\"}");
+    } else sendHttp(fd,404,"{\"ok\":false,\"error\":\"unknown endpoint\"}");
   }catch(const std::exception& e){sendHttp(fd,500,"{\"ok\":false,\"error\":\""+jsonEscape(e.what())+"\"}");}
   close(fd);
 }
