@@ -65,41 +65,9 @@ canvas{width:100%;border-radius:5px;background:#05080c;display:block}
 <nav id="nav"></nav><main id="main"></main>
 <footer id="sb"></footer></div>
 <script>
-/* ========== models/robot.js — fallback UI shapes only; real hardware comes from ESP32 ========== */
-const N=(id,name,unit,min,max)=>({id,name,unit,min,max,kind:'n'});
-const IMU={id:'imu',name:'IMU',kind:'imu'},GPS={id:'gps',name:'GPS',kind:'gps'};
-const AC=(id,name,type,min,max,unit)=>({id,name,type,min,max,unit});
-const legs=Array.from({length:8},(_,i)=>AC('leg_'+(i+1),'Leg '+(i+1),'servo',20,100,'°'));
-const LOOP=(c,a,b)=>`while (robot.connected())\n{\n    if (${c})\n    {\n${a}\n    }\n    else\n    {\n${b}\n    }\n}`;
-const FIRMWARE={
-spider:{label:'Spider',camera:false,panel:'LEG CONTROL',
- sensors:[N('front_distance','Front Distance','cm',5,120),N('left_distance','Left Distance','cm',5,120),N('right_distance','Right Distance','cm',5,120),IMU,N('leg_encoders','Leg Encoders','tick',0,500)],
- actuators:legs,
- controls:['Walk Forward','Walk Backward','Turn Left','Turn Right','Stand','Sit'],
- api:{Movement:['walk_forward','walk_backward','turn_left','turn_right','stand','sit','stop'],Sensors:['front_distance','left_distance','right_distance','imu'],Legs:['leg','set_leg_angle']},
- dec:['front_distance',30,'TURN_LEFT 60','WALK_FORWARD 70'],
- code:LOOP('robot.front_distance() < 30','        robot.stop();\n        robot.turn_left(60);','        robot.walk_forward(70);')},
-bird:{label:'Bird',camera:true,panel:'FLIGHT CONTROL',
- sensors:[IMU,GPS,N('altitude','Altitude','m',5,60)],
- actuators:[AC('wing_l','Left Wing','servo',0,90,'°'),AC('wing_r','Right Wing','servo',0,90,'°'),AC('tail','Tail','servo',0,60,'°'),AC('motor','Flight Motor','motor',0,100,'%')],
- controls:['Takeoff','Land','Forward','Backward','Turn Left','Turn Right','Increase Altitude','Decrease Altitude'],
- api:{Flight:['fly_forward','fly_backward','turn_left','turn_right','increase_altitude','decrease_altitude','takeoff','land'],Sensors:['camera','gps','altitude','imu']},
- dec:['altitude',20,'INCREASE_ALTITUDE 20','FLY_FORWARD 70'],
- code:LOOP('robot.camera.detect_obstacle()','        robot.turn_right(40);\n        robot.increase_altitude(20);','        robot.fly_forward(70);')},
-factory:{label:'Factory Robot',camera:true,panel:'ARM & CONVEYOR',
- sensors:[N('conveyor_rpm','Conveyor Speed','rpm',0,120),N('part_count','Part Count','pcs',0,500),N('arm_torque','Arm Torque','Nm',0,40),N('vibration','Vibration','mm/s',0,10)],
- actuators:[AC('base','Base Joint','servo',0,180,'°'),AC('shoulder','Shoulder','servo',0,150,'°'),AC('elbow','Elbow','servo',0,150,'°'),AC('gripper','Gripper','servo',0,80,'mm'),AC('conveyor','Conveyor Motor','motor',0,100,'%')],
- controls:['Home Arm','Pick','Place','Start Conveyor','Stop Conveyor','E-Stop'],
- api:{Arm:['arm_home','arm_pick','arm_place','set_joint','gripper'],Conveyor:['conveyor_speed','conveyor_stop'],Sensors:['camera','vibration','arm_torque','part_count','conveyor_rpm'],Safety:['emergency_stop']},
- dec:['vibration',6,'CONVEYOR_SPEED 40','CONVEYOR_SPEED 80'],
- code:LOOP('robot.vibration() > 6.0','        robot.conveyor_speed(40);','        robot.camera.part_detected();\n        robot.arm_pick();\n        robot.arm_place();\n        robot.conveyor_speed(80);')},
-wheeled:{label:'Wheeled Robot',camera:false,panel:'DRIVETRAIN',dpad:1,
- sensors:[N('front_distance','Front Distance','cm',5,150),N('line_sensor','Line Sensor','raw',0,1023),N('enc_l','Encoder L','tick',0,9999),N('enc_r','Encoder R','tick',0,9999),IMU],
- actuators:[AC('motor_l','Left Motor','motor',-100,100,'%'),AC('motor_r','Right Motor','motor',-100,100,'%'),AC('pan','Pan Servo','servo',0,180,'°')],
- controls:[null,'Forward',null,'Left','Stop','Right',null,'Back',null],
- api:{Drive:['drive_forward','drive_backward','turn_left','turn_right','stop'],Sensors:['front_distance','line_sensor','encoders','imu'],Motors:['set_motor']},
- dec:['front_distance',25,'TURN_RIGHT 50','DRIVE_FORWARD 80'],
- code:LOOP('robot.front_distance() < 25','        robot.stop();\n        robot.turn_right(50);','        robot.drive_forward(80);')}};
+/* ========== robot model ========== */
+// Hardware definitions are supplied by the connected ESP32. No demo robot is created here.
+
 
 /* ========== api/robotApi.js — real laptop ↔ ESP32 bridge ========== */
 const BRIDGE='http://localhost:8080';
@@ -123,7 +91,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const row=(n,v,f)=>`<div class=row><span>${esc(n)}</span><b>${esc(v)}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
 
 function paintNav(){const on=robots.filter(r=>r.connected).length;
- $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${esc(r.id)} ${esc(FIRMWARE[r.type]?.label||r.type)}<small>${esc(r.connected?r.ip:'offline')}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
+ $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${esc(r.id)} ${esc(r.type||'ESP32 Robot')}<small>${esc(r.connected?r.ip:'offline')}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
  $('#gs').innerHTML=`<i class="d ${on?'on':''}" style="display:inline-block"></i> ${on} connected`;
  document.querySelectorAll('.rb[data-i]').forEach(b=>b.onclick=()=>{cur=robots[+b.dataset.i];paintNav();show()});
  $('#add').onclick=()=>{const n=robots.length+1,r=mk('', 'robot', n);robots.push(r);cur=r;paintNav();show()}}
