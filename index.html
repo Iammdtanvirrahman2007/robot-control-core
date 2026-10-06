@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
 <title>Robot Control Platform</title>
 <style>
 :root{--bg:#0d1117;--p:#141a22;--p2:#1a222c;--ln:#27313d;--tx:#d5dde6;--mu:#7d8b9a;--ac:#38d6c4;--am:#f2b84b;--rd:#ff6b6b;--gn:#5fd68a;--mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;--sans:"Inter","Segoe UI",system-ui,sans-serif;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
@@ -88,6 +89,7 @@ const robots=[],mk=(id='',type='robot',n=1)=>({id,type,ip:'192.168.1.'+(100+n),p
 let cur=null;
 const STATES=['BUILDING','RUNNING','WAITING FOR SENSOR DATA','SENDING COMMAND','ROBOT EXECUTING','STOPPED','ERROR'];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(v,min=0,max=1)=>Math.min(max,Math.max(min,Number.isFinite(+v)?+v:min));
 const row=(n,v,f)=>`<div class=row><span>${esc(n)}</span><b>${esc(v)}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
 
 function paintNav(){const on=robots.filter(r=>r.connected).length;
@@ -124,7 +126,16 @@ function init(r,cfg,preview=false){r.cfg=cfg;const sn={},ac={};
  cfg.actuators.forEach(a=>ac[a.id]=0);
  r.state={connected:true,battery:0,temp:0,currentCommand:'IDLE',speed:0,sensors:sn,actuators:ac,camera:null,errors:[]};
  r.connected=true;r.tx=0;r.rx=0;r.exec='STOPPED';r.tabs=[{name:'brain.cpp',code:cfg.code},{name:'behaviors.cpp',code:`// reusable behaviors for ${r.type}\nvoid avoid_obstacle()\n{\n    robot.stop();\n}`}];
- log(r,preview?`Opened offline preview for ${r.id}`:`Connected to ${r.id}`);if(preview){r.unsub=()=>{};return}r.unsub=api.subscribeTelemetry(r,p=>{const s=r.state;Object.assign(s.sensors,p.sensors);Object.assign(s.actuators,p.actuators);s.battery=p.battery;s.temp=p.temp;r.lat=p.latency;r.rx++;if(r===cur&&r.connected)tick(r)})}
+ log(r,preview?`Opened offline preview for ${r.id}`:`Connected to ${r.id}`);if(preview){r.unsub=()=>{};return}r.unsub=api.subscribeTelemetry(r,p=>{const s=r.state;
+ const sensorValues=p?.sensors&&typeof p.sensors==='object'?p.sensors:{};
+ const actuatorValues=p?.actuators&&typeof p.actuators==='object'?p.actuators:{};
+ for(const d of cfg.sensors)if(p?.[d.id]!==undefined)sensorValues[d.id]=p[d.id];
+ for(const a of cfg.actuators)if(p?.[a.id]!==undefined)actuatorValues[a.id]=p[a.id];
+ Object.assign(s.sensors,sensorValues);Object.assign(s.actuators,actuatorValues);
+ if(p?.battery!==undefined)s.battery=+p.battery||0;
+ if(p?.temperature!==undefined)s.temp=+p.temperature||0;else if(p?.temp!==undefined)s.temp=+p.temp||0;
+ if(p?.camera!==undefined)s.camera=p.camera;
+ r.lat=p?.latency??0;r.rx++;if(r===cur&&r.connected)tick(r)})}
 
 /* ========== pages: robot workspace ========== */
 function show(){if(!cur){showEmpty();paintBar();return}cur.connected?showWs():showConnect();paintBar()}
@@ -169,7 +180,9 @@ function log(r,m,cl=''){r.logs.push(`<div><span class=t>[${ts()}]</span> <span c
 function paintLog(r){const c=$('#con');if(!c)return;c.innerHTML=r.logs.join('');c.scrollTop=c.scrollHeight}
 function setExec(r,s){r.exec=s;if(r===cur){paintPills(r);paintBar()}}
 function paintPills(r){const p=$('#pills');if(p)p.innerHTML=STATES.map(s=>`<span class="pill ${r.exec==s?'on':''} ${s=='ERROR'?'e':''}">● ${s}</span>`).join('')}
-async function manual(r,l){if(!r.connected||!r.state)return;const cmd=l.toUpperCase().replace(/\W+/g,'_').replace(/_$/,''),s=r.state;setExec(r,'SENDING COMMAND');try{const res=await api.sendCommand(r,cmd);if(!res?.ok)throw new Error('command rejected');s.currentCommand=cmd;s.speed=/STOP|LAND|SIT|HOME|E_STOP|EMERGENCY_STOP/.test(cmd)?0:70;r.tx++;log(r,`Manual: ${cmd}`,'cm');setExec(r,'ROBOT EXECUTING');}catch(e){setExec(r,'ERROR');s.errors=[`Manual command failed: ${cmd}`];log(r,`Manual command failed: ${cmd}`,'er')}if(r===cur)tick(r)}
+async function manual(r,l){if(!r.connected||!r.state)return;
+ const cmdMap={Forward:'DRIVE_FORWARD 70',Back:'DRIVE_BACKWARD 70',Left:'TURN_LEFT 60',Right:'TURN_RIGHT 60',Stop:'STOP 0'};
+ const cmd=cmdMap[l]||l.toUpperCase().replace(/\W+/g,'_').replace(/_$/,''),s=r.state;setExec(r,'SENDING COMMAND');try{const res=await api.sendCommand(r,cmd);if(!res?.ok)throw new Error('command rejected');s.currentCommand=cmd;s.speed=/STOP|LAND|SIT|HOME|E_STOP|EMERGENCY_STOP/.test(cmd)?0:70;r.tx++;log(r,`Manual: ${cmd}`,'cm');setExec(r,'ROBOT EXECUTING');}catch(e){setExec(r,'ERROR');s.errors=[`Manual command failed: ${cmd}`];log(r,`Manual command failed: ${cmd}`,'er')}if(r===cur)tick(r)}
 async function build(r){if(!r.connected||!r.cfg||!r.state)return false;const err=$('#err');if(err)err.textContent='';setExec(r,'BUILDING');log(r,'Checking brain.cpp on laptop...');await delay(900);
  const code=r.tabs[0].code,ok=new Set(['connected',...Object.values(r.cfg.api).flat()]);let m,bad;const re=/robot\.(\w+)/g;
  while((m=re.exec(code)))if(!ok.has(m[1])){bad=`brain.cpp:${code.slice(0,m.index).split('\n').length}: error: 'robot.${m[1]}' is not part of the ${r.type.toUpperCase()} API`;break}
