@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <chrono>
+#include <algorithm>
 #include <vector>
 
 static std::string jsonEscape(const std::string& s){
@@ -39,6 +41,34 @@ static std::string tcpRequest(const std::string& ip,int port,const std::string& 
   auto nl=r.find('\n'); if(nl!=std::string::npos) r.resize(nl);
   return r;
 }
+static std::vector<std::string> discoverDevices(){
+  std::vector<std::string> devices;
+  int fd=socket(AF_INET,SOCK_DGRAM,0);
+  if(fd<0) return devices;
+  int one=1;
+  setsockopt(fd,SOL_SOCKET,SO_BROADCAST,&one,sizeof(one));
+  setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof(one));
+  timeval tv{0,350000}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof(tv));
+  sockaddr_in dst{}; dst.sin_family=AF_INET; dst.sin_port=htons(4210); dst.sin_addr.s_addr=INADDR_BROADCAST;
+  const char* msg="ROBOT_DISCOVER";
+  sendto(fd,msg,strlen(msg),0,(sockaddr*)&dst,sizeof(dst));
+  auto start=std::chrono::steady_clock::now();
+  char buf[4096];
+  while(std::chrono::steady_clock::now()-start<std::chrono::milliseconds(1600)){
+    sockaddr_in from{}; socklen_t flen=sizeof(from);
+    ssize_t n=recvfrom(fd,buf,sizeof(buf)-1,0,(sockaddr*)&from,&flen);
+    if(n<=0) continue;
+    buf[n]=0; std::string j(buf,n);
+    if(j.empty()||j.front()!='{') continue;
+    if(j.find("\"ip\"")==std::string::npos){
+      std::string ip=inet_ntoa(from.sin_addr);
+      j="{\"ip\":\""+jsonEscape(ip)+"\",\"port\":5000,\"name\":\"ESP32 Robot\",\"type\":\"robot\"}";
+    }
+    if(std::find(devices.begin(),devices.end(),j)==devices.end()) devices.push_back(j);
+  }
+  close(fd); return devices;
+}
+
 static void sendHttp(int fd,int code,const std::string& body){
   std::string status=code==200?"200 OK":code==400?"400 Bad Request":code==404?"404 Not Found":"500 Internal Server Error";
   std::string h="HTTP/1.1 "+status+"\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Methods: GET,POST,OPTIONS\r\nContent-Length: "+std::to_string(body.size())+"\r\nConnection: close\r\n\r\n";
@@ -52,7 +82,7 @@ static void handle(int fd){
   std::string first=req.substr(0,lineEnd), body=bodyOf(req);
   std::istringstream ss(first); std::string method,path; ss>>method>>path;
   try{
-    if(method=="GET"&&path=="/api/health"){sendHttp(fd,200,"{\"ok\":true,\"service\":\"robot-control-core\",\"transport\":\"HTTP->TCP\"}");close(fd);return;}
+    if(method=="POST"&&path=="/api/discover"){\n      auto ds=discoverDevices(); std::string body="{\\"ok\\":true,\\"devices\\":[";\n      for(size_t i=0;i<ds.size();++i){if(i) body+=","; body+=ds[i];} body+="]}";\n      sendHttp(fd,200,body); close(fd); return;\n    }\n    if(method=="GET"&&path=="/api/health"){sendHttp(fd,200,"{\"ok\":true,\"service\":\"robot-control-core\",\"transport\":\"HTTP->TCP\"}");close(fd);return;}
     std::string ip=jsonValue(body,"ip"); int port=std::stoi(jsonValue(body,"port").empty()?"5000":jsonValue(body,"port"));
     if(method!="POST"){sendHttp(fd,400,"{\"ok\":false,\"error\":\"POST required\"}");close(fd);return;}
     if(path=="/api/connect"){auto r=tcpRequest(ip,port,"PING");sendHttp(fd,r=="PONG"||r=="OK"?200:502,"{\"ok\":"+std::string((r=="PONG"||r=="OK")?"true":"false")+",\"reply\":\""+jsonEscape(r)+"\"}");}
