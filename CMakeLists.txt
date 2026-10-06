@@ -9,6 +9,7 @@ add_library(robot_core
     manager/robot_manager.cpp
     manager/managed_robot.cpp
     manager/multi_robot_manager.cpp
+    protocol/parser.cpp
 )
 
 target_include_directories(robot_core PUBLIC
