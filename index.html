@@ -120,7 +120,8 @@ const robots=[],mk=(id,type,n)=>({id,type,ip:'192.168.1.'+(100+n),port:5000,conn
 [['R1','spider'],['R2','bird'],['R3','factory'],['R4','wheeled']].forEach((x,i)=>robots.push(mk(x[0],x[1],i+1)));
 let cur=robots[0];
 const STATES=['BUILDING','RUNNING','WAITING FOR SENSOR DATA','SENDING COMMAND','ROBOT EXECUTING','STOPPED','ERROR'];
-const row=(n,v,f)=>`<div class=row><span>${n}</span><b>${v}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const row=(n,v,f)=>`<div class=row><span>${esc(n)}</span><b>${esc(v)}</b>${f!=null?`<i style="--f:${clamp(f,0,1)}"></i>`:''}</div>`;
 
 function paintNav(){const on=robots.filter(r=>r.connected).length;
  $('#nav').innerHTML='<h4>ROBOTS</h4>'+robots.map(r=>`<button class="rb ${r===cur?'on':''}" data-i="${robots.indexOf(r)}"><i class="d ${r.connected?'on':''}"></i><span>${r.id} ${FIRMWARE[r.type].label}<small>${r.connected?r.ip:'offline'}</small></span></button>`).join('')+'<button class="rb add" id="add">+ Add Robot</button>';
@@ -158,7 +159,7 @@ function showWs(){const r=cur,c=r.cfg;
 <div class=p><h3>MANUAL CONTROL</h3><div class="mc ${c.dpad?'dp':''}">${c.controls.map(x=>x?`<button class=btn data-c="${x}">${x}</button>`:'<span></span>').join('')}</div></div>
 <div class=p><h3>${r.type.toUpperCase()} API</h3><div class=api>${api_}</div></div>
 <div class=p><h3>COMMUNICATION</h3><div class=cm2><span>LAPTOP</span><span>ESP32</span></div><div class=lane>COMMANDS · Wi-Fi/TCP</div><div class="lane rx">TELEMETRY · Wi-Fi/TCP</div><div class=cm2 id=cstat></div></div></section></div>`;
- $('#dc').onclick=()=>{stop(r,1);r.unsub&&r.unsub();r.connected=false;paintNav();show()};
+ $('#dc').onclick=async()=>{await stop(r,1);r.unsub&&r.unsub();r.unsub=null;r.connected=false;paintNav();show()};
  document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>manual(r,b.dataset.c));
  document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>insert(b.dataset.n));
  $('#bb').onclick=()=>build(r);$('#br').onclick=()=>run(r);$('#bs').onclick=()=>stop(r);$('#bx').onclick=()=>{ta.value='';edit()};
@@ -172,25 +173,25 @@ function tabs(){const r=cur;$('#tabs').innerHTML=r.tabs.map((t,i)=>`<button clas
 function edit(sk){const r=cur,v=$('#ta').value;r.tabs[r.tab].code=v;$('#hl').innerHTML=hl(v)+'\n';$('#ln').textContent=v.split('\n').map((_,i)=>i+1).join('\n');if(!sk)$('#err').textContent=''}
 function hl(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/(\/\/.*)|\b(while|if|else|for|return|true|false|int|float|bool|auto|void|const)\b|\b(\d+(?:\.\d+)?)\b|\b(robot)\b|\b([a-z_]\w*)(?=\()/g,(m,c,k,n,r,f)=>c?`<span class=c>${c}</span>`:k?`<span class=k>${k}</span>`:n?`<span class=n>${n}</span>`:r?`<span class=r>${r}</span>`:`<span class=f>${f}</span>`)}
 function fmt(c){let d=0;return c.split('\n').map(l=>{l=l.trim();const cl=l.startsWith('}');if(cl)d=Math.max(0,d-1);const o='    '.repeat(d)+l;d+=(l.match(/\{/g)||[]).length-(l.match(/\}/g)||[]).length+(cl?1:0);return l?o:''}).join('\n')}
-function insert(n){const ta=$('#ta');ta.focus();document.execCommand('insertText',false,`robot.${n}();`)}
+function insert(n){const ta=$('#ta');if(!ta)return;const text=`robot.${n}();`;const a=ta.selectionStart,b=ta.selectionEnd;ta.setRangeText(text,a,b,'end');edit()}
 function tick(r){if(r!==cur)return;const s=r.state,c=r.cfg;let h='';
  for(const d of c.sensors){const v=s.sensors[d.id];h+=d.kind=='n'?row(d.name,v.toFixed(1)+' '+d.unit,(v-d.min)/(d.max-d.min)):d.kind=='imu'?`<div class=grp>IMU</div>`+['x','y','z'].map(k=>row(k.toUpperCase(),v[k].toFixed(2))).join(''):`<div class=grp>GPS</div>`+row('Lat',v.lat.toFixed(5))+row('Lon',v.lon.toFixed(5))}
  const se=$('#sens');if(!se)return;se.innerHTML=h+row('Battery',s.battery.toFixed(0)+'%',s.battery/100)+row('Temperature',s.temp.toFixed(1)+' °C');
  $('#act').innerHTML=c.actuators.map(a=>row(a.name,s.actuators[a.id].toFixed(0)+a.unit,(s.actuators[a.id]-a.min)/(a.max-a.min))).join('');
- if($('#cinfo'))$('#cinfo').innerHTML=`<span>FPS: ${s.camera.fps}</span><span>${s.camera.res}</span><span>${s.camera.status}</span>`;
+ if($('#cinfo')){const cam=s.camera;if(cam)$('#cinfo').innerHTML=`<span>FPS: ${esc(cam.fps)}</span><span>${esc(cam.res)}</span><span>${esc(cam.status)}</span>`;else $('#cinfo').textContent='Camera telemetry unavailable';}
  $('#cstat').innerHTML=`<span>latency ${r.lat} ms</span><span>TX ${r.tx}</span><span>RX ${r.rx}</span><span style="color:var(--gn)">link up</span>`;paintBar()}
-function cam(){const cv=$('#cv');if(!cv)return;const x=cv.getContext('2d');let t=0;(function f(){if($('#cv')!==cv)return;t+=.02;x.fillStyle='#05080c';x.fillRect(0,0,320,180);x.strokeStyle='#15303a';
+function cam(){const cv=$('#cv');if(!cv)return;const x=cv.getContext('2d');if(!x)return;let t=0;(function f(){if(document.body.contains(cv)===false)return;t+=.02;x.fillStyle='#05080c';x.fillRect(0,0,320,180);x.strokeStyle='#15303a';
  for(let i=0;i<320;i+=32){x.beginPath();x.moveTo(i,0);x.lineTo(i,180);x.stroke()}for(let j=0;j<180;j+=30){x.beginPath();x.moveTo(0,j);x.lineTo(320,j);x.stroke()}
  const bx=140+Math.sin(t)*70,by=80+Math.cos(t*.7)*30;x.strokeStyle='#f2b84b';x.strokeRect(bx,by,50,40);x.fillStyle='#f2b84b';x.font='10px monospace';x.fillText('obstacle 0.87',bx,by-4);
  x.fillStyle='rgba(56,214,196,.25)';x.fillRect(0,(t*60)%180,320,2);x.fillStyle='#38d6c4';x.fillText('● LIVE '+cur.id,8,14);requestAnimationFrame(f)})()}
 
 /* ========== console + execution (mock runtime; real compiler/runtime plugs in later) ========== */
-function log(r,m,cl=''){r.logs.push(`<div><span class=t>[${ts()}]</span> <span class="${cl}">${m}</span></div>`);if(r.logs.length>200)r.logs.shift();if(r===cur)paintLog(r)}
+function log(r,m,cl=''){r.logs.push(`<div><span class=t>[${ts()}]</span> <span class="${esc(cl)}">${esc(m)}</span></div>`);if(r.logs.length>200)r.logs.shift();if(r===cur)paintLog(r)}
 function paintLog(r){const c=$('#con');if(!c)return;c.innerHTML=r.logs.join('');c.scrollTop=c.scrollHeight}
 function setExec(r,s){r.exec=s;if(r===cur){paintPills(r);paintBar()}}
 function paintPills(r){const p=$('#pills');if(p)p.innerHTML=STATES.map(s=>`<span class="pill ${r.exec==s?'on':''} ${s=='ERROR'?'e':''}">● ${s}</span>`).join('')}
-function manual(r,l){const cmd=l.toUpperCase().replace(/\W+/g,'_').replace(/_$/,''),s=r.state;s.currentCommand=cmd;s.speed=/STOP|LAND|SIT|HOME/.test(cmd)?0:70;r.tx++;api.sendCommand(r,cmd);log(r,`Manual: ${cmd}`,'cm');tick(r)}
-async function build(r){const err=$('#err');err.textContent='';setExec(r,'BUILDING');log(r,'Building brain.cpp on laptop...');await delay(900);
+async function manual(r,l){if(!r.connected||!r.state)return;const cmd=l.toUpperCase().replace(/\W+/g,'_').replace(/_$/,''),s=r.state;setExec(r,'SENDING COMMAND');try{const res=await api.sendCommand(r,cmd);if(!res?.ok)throw new Error('command rejected');s.currentCommand=cmd;s.speed=/STOP|LAND|SIT|HOME|E_STOP|EMERGENCY_STOP/.test(cmd)?0:70;r.tx++;log(r,`Manual: ${cmd}`,'cm');setExec(r,'ROBOT EXECUTING');}catch(e){setExec(r,'ERROR');s.errors=[`Manual command failed: ${cmd}`];log(r,`Manual command failed: ${cmd}`,'er')}if(r===cur)tick(r)}
+async function build(r){if(!r.connected||!r.cfg||!r.state)return false;const err=$('#err');if(err)err.textContent='';setExec(r,'BUILDING');log(r,'Checking brain.cpp on laptop...');await delay(900);
  const code=r.tabs[0].code,ok=new Set(['connected',...Object.values(r.cfg.api).flat()]);let m,bad;const re=/robot\.(\w+)/g;
  while((m=re.exec(code)))if(!ok.has(m[1])){bad=`brain.cpp:${code.slice(0,m.index).split('\n').length}: error: 'robot.${m[1]}' is not part of the ${r.type.toUpperCase()} API`;break}
  const o=(code.match(/\{/g)||[]).length,c=(code.match(/\}/g)||[]).length;if(!bad&&o!=c)bad=`brain.cpp:${code.split('\n').length}: error: expected '}' at end of input`;
@@ -198,10 +199,10 @@ async function build(r){const err=$('#err');err.textContent='';setExec(r,'BUILDI
  r.state.errors=[];setExec(r,'STOPPED');log(r,'Build succeeded (0 errors)');return true}
 async function run(r){if(r.timer)return;if(!(await build(r)))return;log(r,'Program started');log(r,`Connected to ${r.id}`);setExec(r,'RUNNING');let ph=0,pend,[sid,th,a,b]=r.cfg.dec;
  const sd=r.cfg.sensors.find(d=>d.id==sid);
- r.timer=setInterval(()=>{const s=r.state,k=ph++%3;
+ r.timer=setInterval(()=>{if(!r.connected||!r.state){clearInterval(r.timer);r.timer=0;return}const s=r.state,k=ph++%3;
   if(k==0){setExec(r,'WAITING FOR SENSOR DATA');const v=s.sensors[sid];log(r,`${sd.name} = ${v.toFixed(0)} ${sd.unit}`);pend=(sid=='vibration'?v>th:v<th)?a:b;if(pend==a)log(r,`Decision: ${a.split(' ')[0]}`)}
-  else if(k==1){setExec(r,'SENDING COMMAND');log(r,`Command: ${pend}`,'cm');s.currentCommand=pend.split(' ')[0];s.speed=+pend.split(' ')[1];r.tx++;api.sendCommand(r,pend)}
+  else if(k==1){setExec(r,'SENDING COMMAND');log(r,`Command: ${pend}`,'cm');const parts=pend.split(' ');api.sendCommand(r,pend).then(res=>{if(!res?.ok)throw new Error('rejected');s.currentCommand=parts[0];s.speed=+parts[1];r.tx++;}).catch(()=>{setExec(r,'ERROR');s.errors=['Command rejected by robot'];log(r,'Command rejected by robot','er')})}
   else{setExec(r,'ROBOT EXECUTING');log(r,`Command sent to ${r.id}`)}},500)}
-function stop(r,q){if(r.timer){clearInterval(r.timer);r.timer=0;if(!q)log(r,'Program stopped');}r.exec='STOPPED';if(r.state){r.state.currentCommand='STOP';r.state.speed=0}if(!q)setExec(r,'STOPPED')}
+async function stop(r,q){if(r.timer){clearInterval(r.timer);r.timer=0;if(!q)log(r,'Program stopped')}if(r.state){r.state.currentCommand='STOP';r.state.speed=0;r.tx++;try{await api.sendCommand(r,'STOP 0')}catch(e){if(!q)log(r,'Stop command failed','er')}}setExec(r,'STOPPED')}
 paintNav();show();
 </script></body></html>
