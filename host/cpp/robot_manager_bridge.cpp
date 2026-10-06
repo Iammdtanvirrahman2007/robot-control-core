@@ -6,7 +6,6 @@ bool RobotManagerBridge::register_robot(
     const std::string& id,
     const std::string& host,
     uint16_t port) {
-
     manager_.add_robot(id, host, port);
     return true;
 }
@@ -22,7 +21,9 @@ bool RobotManagerBridge::command(
     uint8_t speed) {
 
     auto* robot = manager_.robot(id);
-    if (!robot) {
+    if (!robot) return false;
+
+    if (!robot->connected() && !robot->connect()) {
         return false;
     }
 
