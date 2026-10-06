@@ -157,12 +157,48 @@ function render() {
   `).join("");
 }
 
-function sendCommand(id, command, speed) {
+async function sendCommand(id, command, speed) {
   const robot = robots.find(r => r.id === id);
   if (!robot) return;
-  robot.command = command;
-  const line = `[${new Date().toLocaleTimeString()}] ${id} <- ${command} ${speed}`;
+
+  const line = `[${new Date().toLocaleTimeString()}] ${id} -> ${command} ${speed}`;
   logLines.unshift(line);
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/command?robot=${encodeURIComponent(id)}&action=${encodeURIComponent(command)}&speed=${speed}`
+    );
+    const result = await response.json();
+
+    if (result.ok) {
+      robot.command = command;
+      logLines.unshift(`[${new Date().toLocaleTimeString()}] OK: ${result.message}`);
+    } else {
+      logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: ${result.message}`);
+    }
+  } catch (error) {
+    logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`);
+  }
+
+  document.getElementById("log").innerHTML =
+    logLines.slice(0, 30).join("<br>");
+  document.getElementById("fullLog").innerHTML =
+    logLines.join("<br>");
+  render();
+}
+
+async function emergencyStop() {
+  logLines.unshift(`[${new Date().toLocaleTimeString()}] EMERGENCY STOP requested`);
+
+  try {
+    const response = await fetch("http://localhost:8080/api/emergency-stop");
+    const result = await response.json();
+    logLines.unshift(`[${new Date().toLocaleTimeString()}] ${result.ok ? "OK" : "ERROR"}: ${result.message}`);
+  } catch (error) {
+    logLines.unshift(`[${new Date().toLocaleTimeString()}] ERROR: Control server unavailable`);
+  }
+
+  robots.forEach(r => r.command = "STOP");
   document.getElementById("log").innerHTML = logLines.slice(0, 30).join("<br>");
   document.getElementById("fullLog").innerHTML = logLines.join("<br>");
   render();
