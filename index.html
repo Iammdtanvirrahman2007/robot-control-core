@@ -164,27 +164,50 @@ async function build(r){if(!r.connected||!r.cfg||!r.state)return false;const err
  r.state.errors=[];setExec(r,'STOPPED');log(r,'Build succeeded (0 errors)');return true}
 function dslCommand(name,args){
  const a=(args||'').trim(),v=a?parseFloat(a):70;
- const map={walk_forward:'WALK_FORWARD',drive_forward:'DRIVE_FORWARD',walk_backward:'WALK_BACKWARD',drive_backward:'DRIVE_BACKWARD',turn_left:'TURN_LEFT',turn_right:'TURN_RIGHT',stop:'STOP',sit:'SIT',stand:'STOP',land:'LAND',takeoff:'FORWARD',fly_forward:'FORWARD',fly_backward:'BACKWARD',increase_altitude:'FORWARD',decrease_altitude:'BACKWARD'};
- const op=map[name];return op?(op+(op=='STOP'||op=='SIT'||op=='LAND'?' 0':' '+(Number.isFinite(v)?v:70))):null
+ const map={walk_forward:'WALK_FORWARD',drive_forward:'DRIVE_FORWARD',walk_backward:'WALK_BACKWARD',drive_backward:'DRIVE_BACKWARD',turn_left:'TURN_LEFT',turn_right:'TURN_RIGHT',stop:'STOP',sit:'SIT',stand:'STOP',land:'LAND',takeoff:'FORWARD',fly_forward:'FORWARD',fly_backward:'BACKWARD',increase_altitude:'FORWARD',decrease_altitude:'BACKWARD',set_motor_l:'SET_MOTOR_L',set_motor_r:'SET_MOTOR_R'};
+ const op=map[name];return op?(op=='STOP'||op=='SIT'||op=='LAND'?'STOP 0':op+' '+(Number.isFinite(v)?Math.round(v):70)):null
 }
 function parseBrain(code){
- const m=code.match(/if\s*\(\s*robot\.(\w+)\(\)\s*(<=|>=|<|>)\s*([\d.]+)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{([\s\S]*?)\}/);
+ const clean=code.replace(/\/\/.*$/gm,'');
+ const m=clean.match(/if\s*\(\s*robot\.(\w+)\(\)\s*(<=|>=|<|>)\s*([\d.]+)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{([\s\S]*?)\}/);
  if(!m)return null;
  const sensor=m[1],op=m[2],threshold=parseFloat(m[3]);
- const cmd=(block)=>{const x=block.match(/robot\.(\w+)\s*\(([^)]*)\)/);return x?dslCommand(x[1],x[2]):null};
- return {sensor,op,threshold,yes:cmd(m[4]),no:cmd(m[5])};
+ const commands=(block)=>{const out=[],re=/robot\.(\w+)\s*\(([^)]*)\)\s*;/g;let x;while((x=re.exec(block))){const q=dslCommand(x[1],x[2]);if(q)out.push(q)}return out};
+ const yes=commands(m[4]),no=commands(m[5]);
+ if(!yes.length&&!no.length)return null;
+ return {sensor,op,threshold,yes,no,loop:/while\s*\(\s*robot\.connected\s*\(\s*\)\s*\)/.test(clean)};
 }
-async function run(r){if(r.timer)return;if(!(await build(r)))return;
- const brain=parseBrain(r.tabs[0].code);if(!brain){setExec(r,'ERROR');log(r,'Run requires a supported sensor if/else Robot API block.','er');return}
- const sd=r.cfg.sensors.find(d=>d.id==brain.sensor);if(!sd){setExec(r,'ERROR');log(r,'Sensor '+brain.sensor+' is not reported by this ESP32.','er');return}
- log(r,'Program started');setExec(r,'RUNNING');
- r.timer=setInterval(async()=>{if(!r.connected||!r.state){clearInterval(r.timer);r.timer=0;return}
-  const v=Number(r.state.sensors[brain.sensor]);const hit=brain.op=='<'?v<brain.threshold:brain.op=='>'?v>brain.threshold:brain.op=='<='?v<=brain.threshold:v>=brain.threshold;
-  const cmd=hit?brain.yes:brain.no;if(!cmd){setExec(r,'ERROR');log(r,'No executable Robot API command found in code.','er');return}
-  setExec(r,'WAITING FOR SENSOR DATA');log(r,sd.name+' = '+v.toFixed(1)+' '+(sd.unit||''));setExec(r,'SENDING COMMAND');log(r,'Command: '+cmd,'cm');
-  try{const res=await api.sendCommand(r,cmd);if(!res?.ok)throw new Error('rejected');r.state.currentCommand=cmd.split(' ')[0];r.state.speed=parseFloat(cmd.split(' ')[1])||0;r.tx++;setExec(r,'ROBOT EXECUTING')}catch(e){setExec(r,'ERROR');log(r,'Command rejected: '+e.message,'er')}
- },700)}
-
+async function run(r){
+ if(r.timer)return;
+ if(!(await build(r)))return;
+ const brain=parseBrain(r.tabs[0].code);
+ if(!brain){setExec(r,'ERROR');log(r,'Run requires a supported robot.connected() loop with a sensor if/else block.','er');return}
+ const sd=r.cfg.sensors.find(d=>d.id==brain.sensor);
+ if(!sd){setExec(r,'ERROR');log(r,'Sensor '+brain.sensor+' is not reported by this ESP32.','er');return}
+ log(r,'Laptop runtime started'+(brain.loop?' in continuous loop':''));setExec(r,'RUNNING');
+ let busy=false;
+ const cycle=async()=>{
+  if(busy||!r.connected||!r.state)return;
+  busy=true;
+  try{
+   const v=Number(r.state.sensors[brain.sensor]);
+   const hit=brain.op=='<'?v<brain.threshold:brain.op=='>'?v>brain.threshold:brain.op=='<='?v<=brain.threshold:v>=brain.threshold;
+   const list=hit?brain.yes:brain.no;
+   log(r,sd.name+' = '+v.toFixed(1)+' '+(sd.unit||'')+(hit?' → TRUE':' → FALSE'));
+   for(const cmd of list){
+    if(!r.connected)break;
+    setExec(r,'SENDING COMMAND');log(r,'Command: '+cmd,'cm');
+    const res=await api.sendCommand(r,cmd);
+    if(!res?.ok)throw new Error('command rejected');
+    r.state.currentCommand=cmd.split(' ')[0];r.state.speed=parseFloat(cmd.split(' ')[1])||0;r.tx++;setExec(r,'ROBOT EXECUTING');
+    await delay(120);
+   }
+   if(r.connected)setExec(r,'RUNNING');
+  }catch(e){setExec(r,'ERROR');log(r,'Runtime error: '+e.message,'er');stop(r,true)}
+  finally{busy=false}
+ };
+ r.timer=setInterval(cycle,700);cycle();
+}
 async function stop(r,q){if(r.timer){clearInterval(r.timer);r.timer=0;if(!q)log(r,'Program stopped')}if(r.state){r.state.currentCommand='STOP';r.state.speed=0;r.tx++;try{await api.sendCommand(r,'STOP 0')}catch(e){if(!q)log(r,'Stop command failed','er')}}setExec(r,'STOPPED')}
 paintNav();show();
 </script></body></html>
